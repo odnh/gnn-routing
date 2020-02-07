@@ -5,9 +5,11 @@ from rlpyt.utils.tensor import infer_leading_dims, restore_leading_dims
 from rlpyt.models.mlp import MlpModel
 
 
-class CartPolePgModel(torch.nn.Module):
+class CategoricalPgModel(torch.nn.Module):
     """
-    Model of cartpole. Uses MLP with softmax output for categorical
+    A simple model for use with a categorical distribution.
+    Uses MLP (2 layer fully connected) for deep layer with a softmax for policy output.
+    Separate value model with single output and no softmax.
     """
 
     def __init__(
@@ -20,7 +22,7 @@ class CartPolePgModel(torch.nn.Module):
         self._obs_ndim = len(observation_shape)
         input_size = int(np.prod(observation_shape))
 
-        # wrap in softmax for the categorical
+        # wrap MLP with softmax for categorical
         self.pi = torch.nn.Sequential(
                 MlpModel(
                     input_size=input_size,
@@ -29,6 +31,7 @@ class CartPolePgModel(torch.nn.Module):
                     nonlinearity=torch.nn.ReLU),
                 torch.nn.Softmax(dim=-1))
 
+        # separate value model with same architecture
         self.v = MlpModel(
                 input_size=input_size,
                 hidden_sizes=hidden_sizes,
