@@ -12,6 +12,9 @@ from typing import Tuple, List, Dict, Callable, Generator
 
 # Definition of the Routing type (will probablly change)
 Routing = np.ndarray
+DemandMatrix = np.ndarray
+DMMemory = List[np.ndarray]
+Action = np.ndarray
 
 class DDREnv(gym.Env):
     """
@@ -24,7 +27,8 @@ class DDREnv(gym.Env):
     Rewards are: utilisation compared to maximum utilisation
     """
 
-    def __init__(self, dm_generator_getter: Callable[[],Generator[np.ndarray]],
+    def __init__(self, dm_generator_getter:
+            Callable[[],Generator[DemandMatrix]],
             dm_memory_length: int, graph: networkx.Graph):
         """
         Args:
@@ -39,10 +43,12 @@ class DDREnv(gym.Env):
         self.dm_memory = []
         self.graph = graph
 
-    def step(self, action) -> Tuple[List[np.ndarray], float, bool, Dict[int]]:
+    def step(self, action) -> Tuple[DMMemory, float, bool, Dict[int]]:
         """
         Args:
         action: a routing this is a fully specified routing
+        Returns:
+        history of dms and the other bits and pieces expected (use np.stack on the history for training)
         """
         # update dm and history
         new_dm = next(self.dm_generator)
@@ -54,7 +60,7 @@ class DDREnv(gym.Env):
         # work out when to set done
         return (self.dm_memory.copy(), reward, False, dict())
 
-    def reset(self) -> List[np.ndarray]:
+    def reset(self) -> DMMemory:
         self.dm_generator = self.dm_generator_getter()
         self.dm_memory = [next(self.dm_generator)]
         return self.dm_memory.copy()
@@ -65,7 +71,7 @@ class DDREnv(gym.Env):
     def close(self):
         pass
 
-    def get_routing(self, action: np.ndarray) -> Routing:
+    def get_routing(self, action: Action) -> Routing:
         """
         Subclass to use different actions, assumes action is a routing in base
         case
@@ -84,13 +90,13 @@ class DDREnv(gym.Env):
         return -(utilisation/opt_utilisation)
 
     def calc_opt_utilisation(self, graph: networkx.Graph,
-            dm: np.ndarray) -> float:
+            dm: DemandMatrix) -> float:
         """
         Calculates optimal utilisation given dm and graph
         """
         return 0.0
 
-    def calc_utilisation(self, graph: networkx.Graph, dm: np.ndarray,
+    def calc_utilisation(self, graph: networkx.Graph, dm: DemandMatrix,
             routing: Routing) -> float:
         """
         Calculates utilisation of grpah given dm and routing
