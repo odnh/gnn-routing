@@ -3,18 +3,18 @@
 # 2. Different deman matrix generation strategies
 # 3. A simple way to couple the above two parts
 
+from typing import Tuple, List, Dict, Callable, Generator, Type
 import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
 import networkx
 import numpy as np
-from typing import Tuple, List, Dict, Callable, Generator
 
 # Definition of the Routing type (will probablly change)
-Routing = np.ndarray
-DemandMatrix = np.ndarray
+Routing = Type[np.ndarray]
+DemandMatrix = Type[np.ndarray]
 DMMemory = List[np.ndarray]
-Action = np.ndarray
+Action = Type[np.ndarray]
 
 class DDREnv(gym.Env):
     """
@@ -28,7 +28,7 @@ class DDREnv(gym.Env):
     """
 
     def __init__(self, dm_generator_getter:
-            Callable[[],Generator[DemandMatrix]],
+            Callable[[],Generator[DemandMatrix, None, None]],
             dm_memory_length: int, graph: networkx.Graph):
         """
         Args:
@@ -40,10 +40,10 @@ class DDREnv(gym.Env):
         self.dm_generator_getter = dm_generator_getter
         self.dm_generator = dm_generator_getter()
         self.dm_memory_length = dm_memory_length
-        self.dm_memory = []
+        self.dm_memory: List[DemandMatrix] = []
         self.graph = graph
 
-    def step(self, action) -> Tuple[DMMemory, float, bool, Dict[int]]:
+    def step(self, action) -> Tuple[DMMemory, float, bool, Dict[None, None]]:
         """
         Args:
         action: a routing this is a fully specified routing
@@ -53,7 +53,7 @@ class DDREnv(gym.Env):
         # update dm and history
         new_dm = next(self.dm_generator)
         self.dm_memory.append(new_dm)
-        if (len(self.dm_memory_length) > self.dm_memory_length):
+        if (len(self.dm_memory) > self.dm_memory_length):
             self.dm_memory.pop(0)
         routing = self.get_routing(action)
         reward = self.get_reward(routing)
@@ -84,30 +84,40 @@ class DDREnv(gym.Env):
         optimal. May have to call external libraries to calculate efficiently.
         """
         utilisation = self.calc_utilisation(self.graph, self.dm_memory[0],
-                routing)
+                                            routing)
         opt_utilisation = self.calc_opt_utilisation(self.graph,
-                self.dm_memory[0])
+                                                    self.dm_memory[0])
         return -(utilisation/opt_utilisation)
 
     def calc_opt_utilisation(self, graph: networkx.Graph,
-            dm: DemandMatrix) -> float:
+                             demand_matrix: DemandMatrix) -> float:
         """
-        Calculates optimal utilisation given dm and graph
+        Calculates optimal utilisation given demand matrix and graph
         """
         return 0.0
 
-    def calc_utilisation(self, graph: networkx.Graph, dm: DemandMatrix,
-            routing: Routing) -> float:
+    def calc_utilisation(self, graph: networkx.Graph,
+                         demand_matrix: DemandMatrix,
+                         routing: Routing) -> float:
         """
         Calculates utilisation of grpah given dm and routing
         """
         return 0.0
 
 class DDREnvDestSplitting(DDREnv):
+    """
+    DDR Env where all routes are destination based (i.e. each edge has
+    ratios for traffic based only on destination)
+    """
     def get_routing(self, splitting_ratios) -> Routing:
         pass
 
 class DDREnvSoftmin(DDREnv):
+    """
+    DDR Env where all softmin routing is used (from Leanring to Route with
+    Deep RL paper). Routing is a songle weight per edge, transformed to
+    splitting ratios for input to the optimizer calculation.
+    """
     def get_routing(self, edge_weights) -> Routing:
         pass
 
@@ -115,7 +125,17 @@ class DDREnvSoftmin(DDREnv):
 #  1. Sample dm generator
 #  2. Function to calc OPT and u (interface with CPLEX?)
 
-def random_dm_generator(shape, seed, length):
+def random_dm_generator(shape: Tuple[int, int], seed: int, length: int):
     random_state = np.random.RandomState(seed=seed)
     for _ in range(length):
         yield random_state.random_sample(shape)
+
+def gravity_dm_generator(shape: Tuple[int, int], length: int):
+    pass
+
+def calc_opt_utilisation(graph: networkx.Graph,
+                         demand_matrix: DemandMatrix) -> float:
+    """
+    Uses CPLEX LP solver to calculate the optimal max link utilisation
+    """
+    pass
