@@ -16,6 +16,7 @@ def main():
         graph[edge[1]][edge[0]][0] = capacity
     edges = list(graph.edges())
     edge_index_dict = {edge : i for i, edge in enumerate(edges)}
+    print(edges)
     # create demands
     demands = np.random.randint(0, high=10, size=(num_nodes,
                                 num_nodes)).astype(float)
@@ -59,7 +60,7 @@ def main():
         for j in range(graph.number_of_nodes()):
         # Constraint must sum to zero
             constraint_j = solver.Constraint(0, 0, '(2,{},{})'.format(i, j))
-            for k in list(graph.adj[commodity[0]].keys()):
+            for k in list(graph.adj[j].keys()):
                 # Ingress edges
                 constraint_j.SetCoefficient(flow_variables[i][edge_index_dict[(k, j)]], 1)
                 # Egress edges
