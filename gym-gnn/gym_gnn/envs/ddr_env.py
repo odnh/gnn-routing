@@ -48,7 +48,8 @@ class DDREnv(gym.Env):
         Args:
         action: a routing this is a fully specified routing
         Returns:
-        history of dms and the other bits and pieces expected (use np.stack on the history for training)
+        history of dms and the other bits and pieces expected (use np.stack
+        on the history for training)
         """
         # update dm and history
         new_dm = next(self.dm_generator)
@@ -123,7 +124,7 @@ class DDREnvSoftmin(DDREnv):
 
 # Need to add
 #  1. Sample dm generator
-#  2. Function to calc OPT and u (interface with CPLEX?)
+#  2. Function to calc OPT and u (interface with CPLEX? Gurobi, or-tools?)
 
 def random_dm_generator(shape: Tuple[int, int], seed: int, length: int):
     random_state = np.random.RandomState(seed=seed)
