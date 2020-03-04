@@ -1,14 +1,12 @@
-# Sections that need implementing:
-# 1. Actual environment providing obs and rewards for actions
-# 2. Different deman matrix generation strategies
-# 3. A simple way to couple the above two parts
-
 from typing import Tuple, List, Dict, Callable, Generator, Type
 import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
-import networkx
+import networkx as nx
 import numpy as np
+
+from demand_matrices import random_demand, gravity_demand, bimodal_demand
+from optimisers import max_link_utilisation
 
 # Definition of the Routing type (will probablly change)
 Routing = Type[np.ndarray]
@@ -29,13 +27,13 @@ class DDREnv(gym.Env):
 
     def __init__(self, dm_generator_getter:
             Callable[[],Generator[DemandMatrix, None, None]],
-            dm_memory_length: int, graph: networkx.Graph):
+            dm_memory_length: int, graph: nx.Graph):
         """
         Args:
-        dm_generator_getter: a function that returns a genrator for demand
-        matrices (so can reset)
-        dm_memory_length: the length of the dm history we should train on
-        graph: the graph we will be routing over
+          dm_generator_getter: a function that returns a genrator for demand
+                               matrices (so can reset)
+          dm_memory_length: the length of the dm history we should train on
+          graph: the graph we will be routing over
         """
         self.dm_generator_getter = dm_generator_getter
         self.dm_generator = dm_generator_getter()
@@ -46,10 +44,10 @@ class DDREnv(gym.Env):
     def step(self, action) -> Tuple[DMMemory, float, bool, Dict[None, None]]:
         """
         Args:
-        action: a routing this is a fully specified routing
+          action: a routing this is a fully specified routing
         Returns:
-        history of dms and the other bits and pieces expected (use np.stack
-        on the history for training)
+          history of dms and the other bits and pieces expected (use np.stack
+          on the history for training)
         """
         # update dm and history
         new_dm = next(self.dm_generator)
@@ -90,14 +88,14 @@ class DDREnv(gym.Env):
                                                     self.dm_memory[0])
         return -(utilisation/opt_utilisation)
 
-    def calc_opt_utilisation(self, graph: networkx.Graph,
+    def calc_opt_utilisation(self, graph: nx.Graph,
                              demand_matrix: DemandMatrix) -> float:
         """
         Calculates optimal utilisation given demand matrix and graph
         """
         return 0.0
 
-    def calc_utilisation(self, graph: networkx.Graph,
+    def calc_utilisation(self, graph: nx.Graph,
                          demand_matrix: DemandMatrix,
                          routing: Routing) -> float:
         """
@@ -125,6 +123,7 @@ class DDREnvSoftmin(DDREnv):
 # Need to add
 #  1. Sample dm generator
 #  2. Function to calc OPT and u (interface with CPLEX? Gurobi, or-tools?)
+# TODO: gut all of this to match new organisation
 
 def random_dm_generator(shape: Tuple[int, int], seed: int, length: int):
     random_state = np.random.RandomState(seed=seed)
@@ -134,7 +133,7 @@ def random_dm_generator(shape: Tuple[int, int], seed: int, length: int):
 def gravity_dm_generator(shape: Tuple[int, int], length: int):
     pass
 
-def calc_opt_utilisation(graph: networkx.Graph,
+def calc_opt_utilisation(graph: nx.Graph,
                          demand_matrix: DemandMatrix) -> float:
     """
     Uses CPLEX LP solver to calculate the optimal max link utilisation
