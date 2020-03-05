@@ -3,13 +3,13 @@ import numpy as np
 import networkx as nx
 from ortools.linear_solver import pywraplp
 
-def max_link_utilisation(graph: nx.Graph, demands: np.ndarray) -> float:
+def opt(graph: nx.Graph, demands: np.ndarray) -> float:
     """
     Returns the optimal minimum of max-link-utilisation for the graph, given
     the demands
     Args:
       graph: network to optimise over
-      demands: demand matrix, should be n*n in number of nodes
+      demands: demand array should be 1 x (|V|*(|V|-1)) in number of nodes
     Returns:
       min max-link-utilisation
     """
@@ -18,13 +18,17 @@ def max_link_utilisation(graph: nx.Graph, demands: np.ndarray) -> float:
     edge_index_dict = {edge : i for i, edge in enumerate(edges)}
 
     # create commodities from demands (make sure to ignore demand to self)
-    commodities = [(i, j, demands[i, j])
-                   for i in range(graph.number_of_nodes())
-                   for j in range(graph.number_of_nodes()) if i != j]
+    commodities = []
+    flow_count = 0
+    for i in range(graph.number_of_nodes()):
+        for j in range(graph.number_of_nodes()):
+            if i != j:
+                commodities.append((i, j, demands[flow_count]))
+                flow_count += 1
 
     # Create the linear solver with the GLOP backend.
     solver = pywraplp.Solver('multicommodity_flow_lp',
-                                pywraplp.Solver.GLOP_LINEAR_PROGRAMMING)
+                             pywraplp.Solver.GLOP_LINEAR_PROGRAMMING)
 
     ## VARIABLES
     # Flow variables, the splitting ratios for each edge
@@ -124,3 +128,24 @@ def max_link_utilisation(graph: nx.Graph, demands: np.ndarray) -> float:
     solver.Solve()
 
     return objective.Value()
+
+def calc(graph: nx.Graph, demands: np.ndarray, routing: np.ndarray) -> float:
+    """
+    Returns the max-link-utilisation for the graph, given
+    the demands and routing
+    Args:
+      graph: network to optimise over
+      demands: demand matrix, should be 1 x (|V|*(|V|-1)) in number of nodes
+      routing: per-flow edge-splitting ratios (|V|*(|V|-1)) x |E|
+    Returns:
+      max-link-utilisation
+    """
+    max_link_utilisation = 0.0
+
+    for i, edge in enumerate(graph.edges()):
+        link_utilisation = 0.0
+        # This loops over each flow
+        for j in range(routing.shape[0]):
+            link_utilisation += (routing[j][i] * demands[j])
+        max_link_utilisation = max(max_link_utilisation, link_utilisation / graph.get_edge_data(*edge)['weight'])
+    return max_link_utilisation

@@ -6,7 +6,7 @@ import networkx as nx
 import numpy as np
 
 from demand_matrices import random_demand, gravity_demand, bimodal_demand
-from optimisers import max_link_utilisation
+import max_link_utilisation
 
 # Definition of the Routing type (will probablly change)
 Routing = Type[np.ndarray]
@@ -22,7 +22,7 @@ class DDREnv(gym.Env):
     version: edge weigths)
     Actions are fully specified routing. Subclass to either take a less
     specified version and transform otherwise learner will need to change too
-    Rewards are: utilisation compared to maximum utilisation
+    Rewards are: utilisation under routing compared to maximum utilisation
     """
 
     def __init__(self, dm_generator_getter:
@@ -82,26 +82,12 @@ class DDREnv(gym.Env):
         Reward calculated as utilisation of graph given routing compared to
         optimal. May have to call external libraries to calculate efficiently.
         """
-        utilisation = self.calc_utilisation(self.graph, self.dm_memory[0],
-                                            routing)
-        opt_utilisation = self.calc_opt_utilisation(self.graph,
-                                                    self.dm_memory[0])
+        utilisation = max_link_utilisation.calc(self.graph, self.dm_memory[0],
+                                                routing)
+        opt_utilisation = max_link_utilisation.opt(self.graph,
+                                                   self.dm_memory[0])
         return -(utilisation/opt_utilisation)
 
-    def calc_opt_utilisation(self, graph: nx.Graph,
-                             demand_matrix: DemandMatrix) -> float:
-        """
-        Calculates optimal utilisation given demand matrix and graph
-        """
-        return 0.0
-
-    def calc_utilisation(self, graph: nx.Graph,
-                         demand_matrix: DemandMatrix,
-                         routing: Routing) -> float:
-        """
-        Calculates utilisation of grpah given dm and routing
-        """
-        return 0.0
 
 class DDREnvDestSplitting(DDREnv):
     """
@@ -119,23 +105,3 @@ class DDREnvSoftmin(DDREnv):
     """
     def get_routing(self, edge_weights) -> Routing:
         pass
-
-# Need to add
-#  1. Sample dm generator
-#  2. Function to calc OPT and u (interface with CPLEX? Gurobi, or-tools?)
-# TODO: gut all of this to match new organisation
-
-def random_dm_generator(shape: Tuple[int, int], seed: int, length: int):
-    random_state = np.random.RandomState(seed=seed)
-    for _ in range(length):
-        yield random_state.random_sample(shape)
-
-def gravity_dm_generator(shape: Tuple[int, int], length: int):
-    pass
-
-def calc_opt_utilisation(graph: nx.Graph,
-                         demand_matrix: DemandMatrix) -> float:
-    """
-    Uses CPLEX LP solver to calculate the optimal max link utilisation
-    """
-    pass
