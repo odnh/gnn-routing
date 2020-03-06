@@ -14,11 +14,14 @@ Action = Type[np.ndarray]
 class DDREnv(gym.Env):
     """
     Gym env for data driven routing
+
     Observations are: last k routing and DMs
     Actions are: a routing (standard version: dest splitting ratios, softmin
     version: edge weigths)
-    Actions are fully specified routing. Subclass to either take a less
-    specified version and transform otherwise learner will need to change too
+
+    Actions are fully specified (destination based) routing. Subclass to
+    either take a less specified version and transform otherwise learner will
+    need to change too
     Rewards are: utilisation under routing compared to maximum utilisation
     """
 
@@ -40,6 +43,7 @@ class DDREnv(gym.Env):
         self.dm_memory_length = dm_memory_length
         self.dm_memory: List[Demand] = []
         self.graph = graph
+        self.done = False
 
     def step(self, action) -> Tuple[DMMemory, float, bool, Dict[None, None]]:
         """
@@ -49,19 +53,27 @@ class DDREnv(gym.Env):
           history of dms and the other bits and pieces expected (use np.stack
           on the history for training)
         """
+        # Check if sequence is exhausted
+        if self.done:
+            return (self.dm_memory.copy(), 0.0, self.done, dict())
+
         # update dm and history
-        new_dm = next(self.dm_generator)
-        self.dm_memory.append(new_dm)
-        if len(self.dm_memory) > self.dm_memory_length:
-            self.dm_memory.pop(0)
-        routing = self.get_routing(action)
-        reward = self.get_reward(routing)
-        # work out when to set done
-        return (self.dm_memory.copy(), reward, False, dict())
+        new_dm = next(self.dm_generator, None)
+        if new_dm == None:
+            self.done = True
+            return (self.dm_memory.copy(), 0.0, self.done, dict())
+        else:
+            self.dm_memory.append(new_dm)
+            if len(self.dm_memory) > self.dm_memory_length:
+                self.dm_memory.pop(0)
+            routing = self.get_routing(action)
+            reward = self.get_reward(routing)
+        return (self.dm_memory.copy(), reward, self.done, dict())
 
     def reset(self) -> DMMemory:
         self.dm_generator = self.dm_generator_getter()
         self.dm_memory = [next(self.dm_generator)]
+        self.done = False
         return self.dm_memory.copy()
 
     def render(self, mode='human'):
@@ -89,18 +101,10 @@ class DDREnv(gym.Env):
         return -(utilisation/opt_utilisation)
 
 
-class DDREnvDestSplitting(DDREnv):
-    """
-    DDR Env where all routes are destination based (i.e. each edge has
-    ratios for traffic based only on destination)
-    """
-    def get_routing(self, splitting_ratios) -> Routing:
-        pass
-
 class DDREnvSoftmin(DDREnv):
     """
-    DDR Env where all softmin routing is used (from Leanring to Route with
-    Deep RL paper). Routing is a songle weight per edge, transformed to
+    DDR Env where all softmin routing is used (from Learning to Route with
+    Deep RL paper). Routing is a single weight per edge, transformed to
     splitting ratios for input to the optimizer calculation.
     """
     def get_routing(self, edge_weights) -> Routing:
