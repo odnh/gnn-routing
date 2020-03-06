@@ -1,15 +1,16 @@
-from typing import Tuple, List, Dict, Callable, Generator, Type, Iterator, Sized
+from typing import Callable, Type, Iterator
 import networkx as nx
 import numpy as np
+from numpy.random import RandomState
 
 Demand = Type[np.ndarray]
 
 # NB: demands are not matrices, but 1D arrays in deterministic ordering
 
 def sparsify(
-        demands: Demand, 
-        sparsity: float, 
-        random_state: np.random.RandomState) -> Demand:
+        demands: Demand,
+        sparsity: float,
+        random_state: RandomState) -> Demand:
     """
     Sparsifies the given demands by the given sparsity (probability of
     dropping a flow demand between two nodes)
@@ -19,7 +20,7 @@ def sparsify(
     """
     sparsified_demands = demands.copy()
     for i in range(len(demands)):
-        if random_state.uniform() < sparsity :
+        if random_state.uniform() < sparsity:
             sparsified_demands[i] = 0
     return sparsified_demands
 
@@ -33,8 +34,7 @@ def gravity_demand(number_of_flows: int, graph: nx.Graph) -> Demand:
 
 def bimodal_demand(
         number_of_flows: int,
-        random_state: np.random.RandomState
-            = np.random.RandomState()) -> Demand:
+        random_state: RandomState = RandomState()) -> Demand:
     """
     Generates bimodal demand (probabilistic) for one time step
     """
@@ -50,12 +50,11 @@ def bimodal_demand(
     return demand
 
 def cyclical_sequence(
-        demand_generator: Callable[[], Demand], 
-        length: int, 
-        q: int, 
-        sparsity: float, 
-        random_state: np.random.RandomState
-            = np.random.RandomState()) -> Iterator[Demand]:
+        demand_generator: Callable[[], Demand],
+        length: int,
+        q: int,
+        sparsity: float,
+        random_state: RandomState = RandomState()) -> Iterator[Demand]:
     """
     Creates a sequence of length `length` which is a continuous cycle for a
     sequence of demands length q. Demands are all sparsified.
@@ -81,8 +80,7 @@ def average_sequence(
         length: int,
         q: int,
         sparsity: float,
-        random_state: np.random.RandomState
-            = np.random.RandomState()) -> Iterator[Demand]:
+        random_state: RandomState = RandomState()) -> Iterator[Demand]:
     """
     Creates a sequence of length `length` where each demand is the average
     over the previous q demands.
@@ -106,8 +104,7 @@ def random_sequence(
         demand_generator: Callable[[], Demand],
         length: int,
         sparsity: float,
-        random_state: np.random.RandomState
-            = np.random.RandomState()) -> Iterator[Demand]:
+        random_state: RandomState = RandomState()) -> Iterator[Demand]:
     """
     Creates a sequence of length `length` from demands generated using the
     given function. There should be no dependency between items in the

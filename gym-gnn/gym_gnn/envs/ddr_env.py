@@ -1,16 +1,13 @@
 from typing import Tuple, List, Dict, Callable, Generator, Type
 import gym
-from gym import error, spaces, utils
-from gym.utils import seeding
 import networkx as nx
 import numpy as np
 
-from demand_matrices import random_demand, gravity_demand, bimodal_demand
+import demand_matrices
 import max_link_utilisation
 
-# Definition of the Routing type (will probablly change)
 Routing = Type[np.ndarray]
-DemandMatrix = Type[np.ndarray]
+Demand = Type[np.ndarray]
 DMMemory = List[np.ndarray]
 Action = Type[np.ndarray]
 
@@ -25,9 +22,12 @@ class DDREnv(gym.Env):
     Rewards are: utilisation under routing compared to maximum utilisation
     """
 
-    def __init__(self, dm_generator_getter:
-            Callable[[],Generator[DemandMatrix, None, None]],
-            dm_memory_length: int, graph: nx.Graph):
+    def __init__(self,
+                 dm_generator_getter: Callable[
+                     [],
+                     Generator[Demand, None, None]],
+                 dm_memory_length: int,
+                 graph: nx.Graph):
         """
         Args:
           dm_generator_getter: a function that returns a genrator for demand
@@ -38,7 +38,7 @@ class DDREnv(gym.Env):
         self.dm_generator_getter = dm_generator_getter
         self.dm_generator = dm_generator_getter()
         self.dm_memory_length = dm_memory_length
-        self.dm_memory: List[DemandMatrix] = []
+        self.dm_memory: List[Demand] = []
         self.graph = graph
 
     def step(self, action) -> Tuple[DMMemory, float, bool, Dict[None, None]]:
@@ -52,7 +52,7 @@ class DDREnv(gym.Env):
         # update dm and history
         new_dm = next(self.dm_generator)
         self.dm_memory.append(new_dm)
-        if (len(self.dm_memory) > self.dm_memory_length):
+        if len(self.dm_memory) > self.dm_memory_length:
             self.dm_memory.pop(0)
         routing = self.get_routing(action)
         reward = self.get_reward(routing)

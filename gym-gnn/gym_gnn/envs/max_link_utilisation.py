@@ -1,4 +1,3 @@
-import random
 import numpy as np
 import networkx as nx
 from ortools.linear_solver import pywraplp
@@ -50,7 +49,7 @@ def opt(graph: nx.Graph, demands: np.ndarray) -> float:
     for i, edge in enumerate(graph.edges()):
         # Constraint between 0 and edge capacity
         constraint_i = solver.Constraint(
-            0, graph.get_edge_data(*edge)['weight'],'(1,{},{})'.format(*edge))
+            0, graph.get_edge_data(*edge)['weight'], '(1,{},{})'.format(*edge))
         for j, commodity in enumerate(commodities):
             # Coefficient for jth flow over ith edge is scaled by flow width
             constraint_i.SetCoefficient(flow_variables[j][i],
@@ -147,5 +146,7 @@ def calc(graph: nx.Graph, demands: np.ndarray, routing: np.ndarray) -> float:
         # This loops over each flow
         for j in range(routing.shape[0]):
             link_utilisation += (routing[j][i] * demands[j])
-        max_link_utilisation = max(max_link_utilisation, link_utilisation / graph.get_edge_data(*edge)['weight'])
+        max_link_utilisation = max(
+            max_link_utilisation,
+            link_utilisation / graph.get_edge_data(*edge)['weight'])
     return max_link_utilisation
