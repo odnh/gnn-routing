@@ -1,4 +1,4 @@
-from typing import Tuple, List, Dict, Callable, Generator, Type, Iterator
+from typing import Tuple, List, Dict, Callable, Generator, Type, Iterator, Sized
 import networkx as nx
 import numpy as np
 
@@ -8,7 +8,8 @@ Demand = Type[np.ndarray]
 
 def sparsify(
         demands: Demand, 
-        sparsity: float, random_state: np.random.RandomState) -> Demand:
+        sparsity: float, 
+        random_state: np.random.RandomState) -> Demand:
     """
     Sparsifies the given demands by the given sparsity (probability of
     dropping a flow demand between two nodes)
@@ -31,7 +32,9 @@ def gravity_demand(number_of_flows: int, graph: nx.Graph) -> Demand:
     pass
 
 def bimodal_demand(
-    number_of_flows: int, random_state: np.random.RandomState) -> Demand:
+        number_of_flows: int,
+        random_state: np.random.RandomState
+            = np.random.RandomState()) -> Demand:
     """
     Generates bimodal demand (probabilistic) for one time step
     """
@@ -46,12 +49,19 @@ def bimodal_demand(
             demand[i] = random_state.normal(400, 20)
     return demand
 
-def cyclical_sequence(demand_generator: Callable, length: int, q: int, sparsity: float, random_state: np.random.RandomState) -> Iterator[Demand]:
+def cyclical_sequence(
+        demand_generator: Callable[[], Demand], 
+        length: int, 
+        q: int, 
+        sparsity: float, 
+        random_state: np.random.RandomState
+            = np.random.RandomState()) -> Iterator[Demand]:
     """
     Creates a sequence of length `length` which is a continuous cycle for a
     sequence of demands length q. Demands are all sparsified.
     Args:
       demand_generator: returns a demand
+      flows: number of flows
       length: overall sequence length
       q: length of cycle used to build sequence
       sparsity: value used for sparsification of demands
@@ -59,24 +69,45 @@ def cyclical_sequence(demand_generator: Callable, length: int, q: int, sparsity:
     Returns:
       sequence as an iterator
     """
-    pass
+    demand = demand_generator()
+    short_sequence = [sparsify(demand_generator(), sparsity, random_state) for _ in range(q)]
+    i = 0
+    for _ in range(length):
+        yield short_sequence[i]
+        i = (i + 1) % q
 
-def average_sequence(demand_generator: Callable, length: int, q: int, random_state: np.random.RandomState) -> Iterator[Demand]:
+def average_sequence(
+        demand_generator: Callable[[], Demand],
+        length: int,
+        q: int,
+        sparsity: float,
+        random_state: np.random.RandomState
+            = np.random.RandomState()) -> Iterator[Demand]:
     """
-    Creates a sequence of length `length` which is a continuous cycle for a
-    sequence of demands length q. Demands are all sparsified.
+    Creates a sequence of length `length` where each demand is the average
+    over the previous q demands.
     Args:
       demand_generator: returns a demand
       length: overall sequence length
-      q: length of cycle used to build sequence
+      q: length of averaging history
       sparsity: value used for sparsification of demands
       random_state: so that a shared or new seed can be used
     Returns:
       sequence as an iterator
     """
-    pass
+    # initialise history to length q
+    history = [sparsify(demand_generator(), sparsity, random_state) for _ in range(q)]
+    for _ in range(length):
+        yield np.mean(history, axis=1)
+        history.pop(0)
+        history.append(sparsify(demand_generator(), sparsity, random_state))
 
-def random_sequence(demand_generator: Callable, length: int, random_state: np.random.RandomState) -> Iterator[Demand]:
+def random_sequence(
+        demand_generator: Callable[[], Demand],
+        length: int,
+        sparsity: float,
+        random_state: np.random.RandomState
+            = np.random.RandomState()) -> Iterator[Demand]:
     """
     Creates a sequence of length `length` from demands generated using the
     given function. There should be no dependency between items in the
@@ -90,6 +121,4 @@ def random_sequence(demand_generator: Callable, length: int, random_state: np.ra
       sequence as an iterator
     """
     for _ in range(length):
-        #TODO: fill this in (need to decide on generator function api)
-        yield demand_generator()
-    pass
+        yield sparsify(demand_generator(), sparsity, random_state)
