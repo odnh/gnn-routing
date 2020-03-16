@@ -5,32 +5,71 @@ from ortools.linear_solver import pywraplp
 
 def main():
     ## BUILD SIMPLE GRAPH FOR TESTING
-    num_nodes = 4
-    # Assumes graph always has edge in both directions even though `directed`
-    graph = nx.Graph().to_directed()
-    edge_weight = 10
-    graph.add_edge(0, 1, weight=edge_weight)
-    graph.add_edge(1, 0, weight=edge_weight)
-    graph.add_edge(1, 2, weight=edge_weight)
-    graph.add_edge(2, 1, weight=edge_weight)
-    graph.add_edge(2, 3, weight=edge_weight)
-    graph.add_edge(3, 2, weight=edge_weight)
-    graph.add_edge(3, 0, weight=edge_weight)
-    graph.add_edge(0, 3, weight=edge_weight)
-    demands = np.ones(shape=(num_nodes, num_nodes), dtype=float)
+    # num_nodes = 12
+    # # Assumes graph always has edge in both directions even though `directed`
+    # graph = nx.Graph().to_directed()
+    # edge_weight = 27
+    # graph.add_edge(0, 1, weight=edge_weight)
+    # graph.add_edge(1, 0, weight=edge_weight)
+    # graph.add_edge(1, 2, weight=edge_weight)
+    # graph.add_edge(2, 1, weight=edge_weight)
+    # graph.add_edge(2, 3, weight=edge_weight)
+    # graph.add_edge(3, 2, weight=edge_weight)
+    # graph.add_edge(3, 0, weight=edge_weight)
+    # graph.add_edge(0, 3, weight=edge_weight)
+    # graph.add_edge(0, 4, weight=edge_weight)
+    # graph.add_edge(0, 5, weight=edge_weight)
+    # graph.add_edge(0, 6, weight=edge_weight)
+    # graph.add_edge(0, 7, weight=edge_weight)
+    # graph.add_edge(0, 8, weight=edge_weight)
+    # graph.add_edge(4, 9, weight=edge_weight)
+    # graph.add_edge(4, 10, weight=edge_weight)
+    # graph.add_edge(2, 11, weight=edge_weight)
+    # graph.add_edge(3, 11, weight=edge_weight)
+    # graph.add_edge(2, 5, weight=edge_weight)
+    # graph.add_edge(4, 0, weight=edge_weight)
+    # graph.add_edge(5, 0, weight=edge_weight)
+    # graph.add_edge(6, 0, weight=edge_weight)
+    # graph.add_edge(7, 0, weight=edge_weight)
+    # graph.add_edge(8, 0, weight=edge_weight)
+    # graph.add_edge(9, 4, weight=edge_weight)
+    # graph.add_edge(10, 4, weight=edge_weight)
+    # graph.add_edge(11, 2, weight=edge_weight)
+    # graph.add_edge(11, 3, weight=edge_weight)
+    # graph.add_edge(5, 2, weight=edge_weight)
 
+    num_nodes = 5
+    graph = nx.Graph().to_directed()
+    graph.add_edge(0, 1, weight=3.0)
+    graph.add_edge(1, 0, weight=2.0)
+    graph.add_edge(1, 2, weight=2.0)
+    graph.add_edge(2, 1, weight=1.0)
+    graph.add_edge(1, 3, weight=1.0)
+    graph.add_edge(3, 1, weight=1.0)
+    graph.add_edge(2, 4, weight=2.0)
+    graph.add_edge(4, 2, weight=1.0)
+    graph.add_edge(3, 4, weight=1.0)
+    graph.add_edge(4, 3, weight=1.0)
+    demands = np.array([0, 0, 0, 3.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    # demands = np.array([01 02 03 04 10 12 13 14 20 21 23 24 30 31 32 34 40 41 42 43])
+    # demands = np.ones(shape=(num_nodes, num_nodes), dtype=float)
 
     ## ACTUAL CODE START
     edges = list(graph.edges())
     edge_index_dict = {edge : i for i, edge in enumerate(edges)}
-    
+
     # create commodities from demands (make sure to ignore demand to self)
-    commodities = [(i, j, demands[i, j]) for i in range(num_nodes)
-                                         for j in range(num_nodes) if i != j]
+    commodities = []
+    flow_count = 0
+    for i in range(graph.number_of_nodes()):
+        for j in range(graph.number_of_nodes()):
+            if i != j:
+                commodities.append((i, j, demands[flow_count]))
+                flow_count += 1
 
     # Create the linear solver with the GLOP backend.
     solver = pywraplp.Solver('multicommodity_flow_lp',
-                                pywraplp.Solver.GLOP_LINEAR_PROGRAMMING)
+                             pywraplp.Solver.GLOP_LINEAR_PROGRAMMING)
 
     ## VARIABLES
     # Flow variables, the splitting ratios for each edge
@@ -132,10 +171,10 @@ def main():
     print('Solution:')
     print('Objective value =', objective.Value())
 
-    for i, flow_var in enumerate(flow_variables):
-        print("Flow: {}".format(i))
-        for edge in flow_var:
-            print(edge.solution_value())
+    # for i, flow_var in enumerate(flow_variables):
+    #     print("Flow: {}".format(i))
+    #     for edge in flow_var:
+    #         print(edge.solution_value())
 
 if __name__ == '__main__':
     main()

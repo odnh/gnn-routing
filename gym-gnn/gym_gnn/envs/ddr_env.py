@@ -3,8 +3,8 @@ import gym
 import networkx as nx
 import numpy as np
 
-import demand_matrices
-import max_link_utilisation
+from . import demand_matrices
+from . import max_link_utilisation
 
 Routing = Type[np.ndarray]
 Demand = Type[np.ndarray]
@@ -45,10 +45,17 @@ class DDREnv(gym.Env):
         self.graph = graph
         self.done = False
 
+        self.action_space = gym.spaces.Box(low=-1.0,
+            high=1.0,
+            shape=(graph.number_of_nodes()*(graph.number_of_nodes()-1)*graph.number_of_edges(),))
+        self.observation_space = gym.spaces.Box(low=-np.inf,
+            high=np.inf,
+            shape=(dm_memory_length, graph.number_of_nodes()*(graph.number_of_nodes()-1)))
+
     def step(self, action) -> Tuple[DMMemory, float, bool, Dict[None, None]]:
         """
         Args:
-          action: a routing this is a fully specified routing
+          action: a routing this is a fully specified routing (must be 1D ndarray)
         Returns:
           history of dms and the other bits and pieces expected (use np.stack
           on the history for training)
@@ -59,7 +66,7 @@ class DDREnv(gym.Env):
 
         # update dm and history
         new_dm = next(self.dm_generator, None)
-        if new_dm == None:
+        if new_dm is None:
             self.done = True
             return (self.dm_memory.copy(), 0.0, self.done, dict())
         else:
@@ -107,5 +114,6 @@ class DDREnvSoftmin(DDREnv):
     Deep RL paper). Routing is a single weight per edge, transformed to
     splitting ratios for input to the optimizer calculation.
     """
+    #TODO: need to also override the action_space
     def get_routing(self, edge_weights) -> Routing:
         pass

@@ -2,12 +2,12 @@ import numpy as np
 import networkx as nx
 from ortools.linear_solver import pywraplp
 
-def opt(graph: nx.Graph, demands: np.ndarray) -> float:
+def opt(graph: nx.DiGraph, demands: np.ndarray) -> float:
     """
     Returns the optimal minimum of max-link-utilisation for the graph, given
     the demands
     Args:
-      graph: network to optimise over
+      graph: network to optimise over (must be ph with all edges bidirectional)
       demands: demand array should be 1 x (|V|*(|V|-1)) in number of nodes
     Returns:
       min max-link-utilisation
@@ -33,15 +33,12 @@ def opt(graph: nx.Graph, demands: np.ndarray) -> float:
     # Flow variables, the splitting ratios for each edge
     # Stored as a list of lists (flow_variables[ith_flow][jth_edge])
     flow_variables = []
-    print(list(graph.edges()))
     for i in range(len(commodities)):
         flow_variable_edges = []
         for j in range(graph.number_of_edges()):
             flow_variable_edges.append(
                 solver.NumVar(0, 1, '({},{})'.format(i, j)))
         flow_variables.append(flow_variable_edges)
-
-    print('Number of variables =', solver.NumVariables())
 
     ## CONSTRAINTS
     # Capacity constraint
@@ -100,8 +97,6 @@ def opt(graph: nx.Graph, demands: np.ndarray) -> float:
                 flow_variables[i][edge_index_dict[(commodity[1], edge_dest)]], -1)
         conservation_dest_constraints.append(constraint_i)
 
-    print('Number of constraints =', solver.NumConstraints())
-
     ## OBJECTIVES
     # Implementation of the load-balancing example from wikipedia
     # First we add more constraints so that we are minimising the maximum
@@ -128,7 +123,7 @@ def opt(graph: nx.Graph, demands: np.ndarray) -> float:
 
     return objective.Value()
 
-def calc(graph: nx.Graph, demands: np.ndarray, routing: np.ndarray) -> float:
+def calc(graph: nx.DiGraph, demands: np.ndarray, routing: np.ndarray) -> float:
     """
     Returns the max-link-utilisation for the graph, given
     the demands and routing
@@ -141,11 +136,15 @@ def calc(graph: nx.Graph, demands: np.ndarray, routing: np.ndarray) -> float:
     """
     max_link_utilisation = 0.0
 
+    # Calculate bounds for to interpret 1D array in 2D
+    num_edges = graph.number_of_edges()
+    num_demands = routing.size // num_edges
+
     for i, edge in enumerate(graph.edges()):
         link_utilisation = 0.0
         # This loops over each flow
-        for j in range(routing.shape[0]):
-            link_utilisation += (routing[j][i] * demands[j])
+        for j in range(num_demands):
+            link_utilisation += (routing[j*num_edges + i] * demands[j])
         max_link_utilisation = max(
             max_link_utilisation,
             link_utilisation / graph.get_edge_data(*edge)['weight'])
