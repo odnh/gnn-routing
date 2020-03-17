@@ -1,8 +1,14 @@
+from typing import Type
+
 import numpy as np
 import networkx as nx
 from ortools.linear_solver import pywraplp
 
-def opt(graph: nx.DiGraph, demands: np.ndarray) -> float:
+Demand = Type[np.ndarray]
+Routing = Type[np.ndarray]
+
+
+def opt(graph: nx.DiGraph, demands: Demand) -> float:
     """
     Returns the optimal minimum of max-link-utilisation for the graph, given
     the demands
@@ -12,9 +18,9 @@ def opt(graph: nx.DiGraph, demands: np.ndarray) -> float:
     Returns:
       min max-link-utilisation
     """
-    ##  Build helper data
+    ## Build helper data
     edges = list(graph.edges())
-    edge_index_dict = {edge : i for i, edge in enumerate(edges)}
+    edge_index_dict = {edge: i for i, edge in enumerate(edges)}
 
     # create commodities from demands (make sure to ignore demand to self)
     commodities = []
@@ -123,7 +129,8 @@ def opt(graph: nx.DiGraph, demands: np.ndarray) -> float:
 
     return objective.Value()
 
-def calc(graph: nx.DiGraph, demands: np.ndarray, routing: np.ndarray) -> float:
+
+def calc(graph: nx.DiGraph, demands: Demand, routing: Routing) -> float:
     """
     Returns the max-link-utilisation for the graph, given
     the demands and routing
@@ -144,7 +151,7 @@ def calc(graph: nx.DiGraph, demands: np.ndarray, routing: np.ndarray) -> float:
         link_utilisation = 0.0
         # This loops over each flow
         for j in range(num_demands):
-            link_utilisation += (routing[j*num_edges + i] * demands[j])
+            link_utilisation += (routing[j * num_edges + i] * demands[j])
         max_link_utilisation = max(
             max_link_utilisation,
             link_utilisation / graph.get_edge_data(*edge)['weight'])

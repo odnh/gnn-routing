@@ -3,13 +3,13 @@ import gym
 import networkx as nx
 import numpy as np
 
-from . import demand_matrices
 from . import max_link_utilisation
 
 Routing = Type[np.ndarray]
 Demand = Type[np.ndarray]
-DMMemory = List[np.ndarray]
+Observation = Type[np.ndarray]
 Action = Type[np.ndarray]
+
 
 class DDREnv(gym.Env):
     """
@@ -17,12 +17,15 @@ class DDREnv(gym.Env):
 
     Observations are: last k routing and DMs
     Actions are: a routing (standard version: dest splitting ratios, softmin
-    version: edge weigths)
+    version: edge weights)
 
     Actions are fully specified (destination based) routing. Subclass to
     either take a less specified version and transform otherwise learner will
     need to change too
     Rewards are: utilisation under routing compared to maximum utilisation
+
+    NB: actions and observations are flattened for external view but retain their shape internally and when used in the
+    optimisation step
     """
 
     def __init__(self,
@@ -30,10 +33,10 @@ class DDREnv(gym.Env):
                      [],
                      Generator[Demand, None, None]],
                  dm_memory_length: int,
-                 graph: nx.Graph):
+                 graph: nx.DiGraph):
         """
         Args:
-          dm_generator_getter: a function that returns a genrator for demand
+          dm_generator_getter: a function that returns a generator for demand
                                matrices (so can reset)
           dm_memory_length: the length of the dm history we should train on
           graph: the graph we will be routing over
@@ -45,14 +48,16 @@ class DDREnv(gym.Env):
         self.graph = graph
         self.done = False
 
-        self.action_space = gym.spaces.Box(low=-1.0,
-            high=1.0,
-            shape=(graph.number_of_nodes()*(graph.number_of_nodes()-1)*graph.number_of_edges(),))
+        self.action_space = gym.spaces.Box(low=-1.0, #TODO: should be 0 but gaussian model requires otherwise
+                                           high=1.0,
+                                           shape=(graph.number_of_nodes() * (
+                                                       graph.number_of_nodes() - 1) * graph.number_of_edges(),))
         self.observation_space = gym.spaces.Box(low=-np.inf,
-            high=np.inf,
-            shape=(dm_memory_length, graph.number_of_nodes()*(graph.number_of_nodes()-1)))
+                                                high=np.inf,
+                                                shape=(dm_memory_length *
+                                                       graph.number_of_nodes() * (graph.number_of_nodes() - 1),))
 
-    def step(self, action) -> Tuple[DMMemory, float, bool, Dict[None, None]]:
+    def step(self, action: Type[np.ndarray]) -> Tuple[Observation, float, bool, Dict[None, None]]:
         """
         Args:
           action: a routing this is a fully specified routing (must be 1D ndarray)
@@ -62,26 +67,26 @@ class DDREnv(gym.Env):
         """
         # Check if sequence is exhausted
         if self.done:
-            return (self.dm_memory.copy(), 0.0, self.done, dict())
+            return self.get_observation(), 0.0, self.done, dict()
 
         # update dm and history
         new_dm = next(self.dm_generator, None)
         if new_dm is None:
             self.done = True
-            return (self.dm_memory.copy(), 0.0, self.done, dict())
+            return self.get_observation(), 0.0, self.done, dict()
         else:
             self.dm_memory.append(new_dm)
             if len(self.dm_memory) > self.dm_memory_length:
                 self.dm_memory.pop(0)
             routing = self.get_routing(action)
             reward = self.get_reward(routing)
-        return (self.dm_memory.copy(), reward, self.done, dict())
+        return self.get_observation(), reward, self.done, dict()
 
-    def reset(self) -> DMMemory:
+    def reset(self) -> Observation:
         self.dm_generator = self.dm_generator_getter()
-        self.dm_memory = [next(self.dm_generator)]
+        self.dm_memory = [next(self.dm_generator) for _ in range(self.dm_memory_length)]
         self.done = False
-        return self.dm_memory.copy()
+        return self.get_observation()
 
     def render(self, mode='human'):
         pass
@@ -105,7 +110,10 @@ class DDREnv(gym.Env):
                                                 routing)
         opt_utilisation = max_link_utilisation.opt(self.graph,
                                                    self.dm_memory[0])
-        return -(utilisation/opt_utilisation)
+        return -(utilisation / opt_utilisation)
+
+    def get_observation(self) -> Observation:
+        return np.concatenate(self.dm_memory).ravel()
 
 
 class DDREnvSoftmin(DDREnv):
@@ -114,6 +122,7 @@ class DDREnvSoftmin(DDREnv):
     Deep RL paper). Routing is a single weight per edge, transformed to
     splitting ratios for input to the optimizer calculation.
     """
-    #TODO: need to also override the action_space
+
+    # TODO: need to also override the action_space
     def get_routing(self, edge_weights) -> Routing:
         pass
