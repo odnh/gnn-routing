@@ -22,9 +22,6 @@ class DDREnv(gym.Env):
     each edge). Subclass to either take a less specified version and transform
     otherwise learner will need to change too
     Rewards are: utilisation under routing compared to maximum utilisation
-
-    NB: actions and observations are flattened for external view but retain
-    their shape internally and when used in the optimisation step
     """
 
     def __init__(self,
@@ -48,15 +45,15 @@ class DDREnv(gym.Env):
         self.done = False
 
         self.action_space = gym.spaces.Box(
-            low=0.0,  # TODO: should be 0 but gaussian model requires otherwise
+            low=0.0,
             high=1.0,
-            shape=(graph.number_of_nodes() * (
-            graph.number_of_nodes() - 1) * graph.number_of_edges(),))
+            shape=(graph.number_of_nodes() * (graph.number_of_nodes() - 1),
+                   graph.number_of_edges()))
         self.observation_space = gym.spaces.Box(
             low=-np.inf,
             high=np.inf,
             shape=(dm_memory_length *
-            graph.number_of_nodes() * (graph.number_of_nodes() - 1),))
+                   graph.number_of_nodes() * (graph.number_of_nodes() - 1),))
 
     def step(self, action: Type[np.ndarray]) -> Tuple[Observation,
                                                       float,
@@ -127,6 +124,7 @@ class DDREnvDest(DDREnv):
     the action space. This class simply performs the translation to a full
     routing.
     """
+
     def __init__(self,
                  dm_generator_getter: Callable[
                      [],
@@ -134,14 +132,44 @@ class DDREnvDest(DDREnv):
                  dm_memory_length: int,
                  graph: nx.DiGraph):
         super().__init__(dm_generator_getter, dm_memory_length, graph)
-        self.action_space = gym.spaces.Box( #TODO: set this properly
+        max_out_degree = max(dict(graph.out_degree()).values())
+
+        self.action_space = gym.spaces.Box(
             low=0.0,
             high=1.0,
-            shape=(graph.number_of_nodes() * (
-                    graph.number_of_nodes() - 1) * graph.number_of_edges(),))
+            shape=(graph.number_of_nodes(),  # vertices
+                   graph.number_of_nodes() - 1,  # destinations
+                   max_out_degree))  # outgoing edges
+
+        # Precompute list of flows for use in routing translation
+        num_nodes = self.graph.number_of_nodes()
+        self.flows = [(i, j) for i in range(num_nodes) for j in range(num_nodes)
+                      if i != j]
+
+        # Indices of the edges for lookup in routing translation
+        # Takes each edge of graph to an index under its source node
+        self.edge_index = {}
+        for node in range(graph.number_of_nodes()):
+            count = 0
+            for edge in graph.out_edges(node):
+                self.edge_index[edge] = count
+                count += 1
 
     def get_routing(self, action: Action) -> Routing:
-        pass
+        """
+        Converts a destination routing to full routing
+        Args:
+            action: dims 0: vertices, 1: dests, 2: outgoing edges
+        Returns:
+            A fully specified routing (dims 0: flows, 1: edges)
+        """
+        num_edges = self.graph.number_of_edges()
+        full_routing = np.zeros((len(self.flows), num_edges), dtype=np.float32)
+        for i, (_, dst) in enumerate(self.flows):
+            for j, edge in enumerate(self.graph.edges()):
+                full_routing[i][j] = action[edge[0]][dst][self.edge_index[edge]]
+
+        return full_routing
 
 
 class DDREnvSoftmin(DDREnv):
@@ -158,11 +186,10 @@ class DDREnvSoftmin(DDREnv):
                  dm_memory_length: int,
                  graph: nx.DiGraph):
         super().__init__(dm_generator_getter, dm_memory_length, graph)
-        self.action_space = gym.spaces.Box( #TODO: set this properly
+        self.action_space = gym.spaces.Box(  # TODO: set this properly
             low=0.0,
-            high=1.0,
-            shape=(graph.number_of_nodes() * (
-                    graph.number_of_nodes() - 1) * graph.number_of_edges(),))
+            high=1.0,  # TODO: check this is right or should be unbounded above
+            shape=(graph.number_of_edges(),))
 
     def get_routing(self, action: Action) -> Routing:
         pass

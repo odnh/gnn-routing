@@ -140,18 +140,16 @@ def calc(graph: nx.DiGraph, demands: Demand, routing: Routing) -> float:
       routing: per-flow edge-splitting ratios (|V|*(|V|-1)) x |E|
     Returns:
       max-link-utilisation
+
+    NB: does not actually check given routing is valid but assumes it is.
     """
     max_link_utilisation = 0.0
-
-    # Calculate bounds for to interpret 1D array in 2D
-    num_edges = graph.number_of_edges()
-    num_demands = routing.size // num_edges
 
     for i, edge in enumerate(graph.edges()):
         link_utilisation = 0.0
         # This loops over each flow
-        for j in range(num_demands):
-            link_utilisation += (routing[j * num_edges + i] * demands[j])
+        for j in range(routing.shape[0]):
+            link_utilisation += (routing[j][i] * demands[j])
         max_link_utilisation = max(
             max_link_utilisation,
             link_utilisation / graph.get_edge_data(*edge)['weight'])
