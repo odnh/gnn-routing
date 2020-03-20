@@ -184,12 +184,64 @@ class DDREnvSoftmin(DDREnv):
                      [],
                      Generator[Demand, None, None]],
                  dm_memory_length: int,
-                 graph: nx.DiGraph):
+                 graph: nx.DiGraph,
+                 gamma: float = 2):
         super().__init__(dm_generator_getter, dm_memory_length, graph)
-        self.action_space = gym.spaces.Box(  # TODO: set this properly
+
+        # Precompute list of flows for use in routing translation
+        num_nodes = self.graph.number_of_nodes()
+        self.flows = [(i, j) for i in range(num_nodes) for j in range(num_nodes)
+                      if i != j]
+        self.gamma = gamma
+
+        self.action_space = gym.spaces.Box(
             low=0.0,
-            high=1.0,  # TODO: check this is right or should be unbounded above
+            high=1.0,
             shape=(graph.number_of_edges(),))
 
+        # Indices of the edges for lookup in routing translation
+        # Takes each edge of graph to an index under its source node
+        self.edge_index = {}
+        for node in range(graph.number_of_nodes()):
+            count = 0
+            for edge in graph.out_edges(node):
+                self.edge_index[edge] = count
+                count += 1
+
     def get_routing(self, action: Action) -> Routing:
-        pass
+        """
+        Converts a softmin routing to full routing
+        Args:
+            action: dims 0: edges
+        Returns:
+            A fully specified routing (dims 0: flows, 1: edges)
+        """
+        num_edges = self.graph.number_of_edges()
+        full_routing = np.zeros((len(self.flows), num_edges), dtype=np.float32)
+        softmin_edge_weights = np.zeros(num_edges)
+
+        for i in range(self.graph.number_of_nodes()):
+            out_edge_ids = [self.edge_index(e) for e in self.graph.out_edges(i)]
+            out_edge_weights = [action[i] for i in out_edge_ids]
+            softmin_weights = self.softmin(out_edge_weights)
+            for j, id in enumerate(out_edge_ids):
+                softmin_edge_weights[id] = softmin_weights[j]
+
+        for i, flow in enumerate(self.flows):
+            for j, edge in enumerate(self.graph.edges()):
+               full_routing[i][j] = softmin_edge_weights[j]  # Surely wrong?
+
+        return full_routing
+
+    def softmin(self, array: np.ndarray):
+        """
+        Calculates and returns the softmin of an np array
+        Args:
+            array: a 1D ndarray
+
+        Returns:
+            a 1D ndarray of the same size
+        """
+        exponentiated = [np.exp(-self.gamma * i) for i in array]
+        total = sum(exponentiated)
+        return [np.exp(-self.gamma * i)/total for i in exponentiated]
