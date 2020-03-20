@@ -16,16 +16,15 @@ class DDREnv(gym.Env):
     Gym env for data driven routing
 
     Observations are: last k routing and DMs
-    Actions are: a routing (standard version: dest splitting ratios, softmin
-    version: edge weights)
+    Actions are: a routing
 
-    Actions are fully specified (destination based) routing. Subclass to
-    either take a less specified version and transform otherwise learner will
-    need to change too
+    Actions are fully specified routing (i.e. splitting ratio for each flow over
+    each edge). Subclass to either take a less specified version and transform
+    otherwise learner will need to change too
     Rewards are: utilisation under routing compared to maximum utilisation
 
-    NB: actions and observations are flattened for external view but retain their shape internally and when used in the
-    optimisation step
+    NB: actions and observations are flattened for external view but retain
+    their shape internally and when used in the optimisation step
     """
 
     def __init__(self,
@@ -48,19 +47,24 @@ class DDREnv(gym.Env):
         self.graph = graph
         self.done = False
 
-        self.action_space = gym.spaces.Box(low=-1.0, #TODO: should be 0 but gaussian model requires otherwise
-                                           high=1.0,
-                                           shape=(graph.number_of_nodes() * (
-                                                       graph.number_of_nodes() - 1) * graph.number_of_edges(),))
-        self.observation_space = gym.spaces.Box(low=-np.inf,
-                                                high=np.inf,
-                                                shape=(dm_memory_length *
-                                                       graph.number_of_nodes() * (graph.number_of_nodes() - 1),))
+        self.action_space = gym.spaces.Box(
+            low=0.0,  # TODO: should be 0 but gaussian model requires otherwise
+            high=1.0,
+            shape=(graph.number_of_nodes() * (
+            graph.number_of_nodes() - 1) * graph.number_of_edges(),))
+        self.observation_space = gym.spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(dm_memory_length *
+            graph.number_of_nodes() * (graph.number_of_nodes() - 1),))
 
-    def step(self, action: Type[np.ndarray]) -> Tuple[Observation, float, bool, Dict[None, None]]:
+    def step(self, action: Type[np.ndarray]) -> Tuple[Observation,
+                                                      float,
+                                                      bool, Dict[None, None]]:
         """
         Args:
-          action: a routing this is a fully specified routing (must be 1D ndarray)
+          action: a routing this is a fully specified routing (must be 1D
+                  ndarray)
         Returns:
           history of dms and the other bits and pieces expected (use np.stack
           on the history for training)
@@ -84,7 +88,8 @@ class DDREnv(gym.Env):
 
     def reset(self) -> Observation:
         self.dm_generator = self.dm_generator_getter()
-        self.dm_memory = [next(self.dm_generator) for _ in range(self.dm_memory_length)]
+        self.dm_memory = [next(self.dm_generator) for _ in
+                          range(self.dm_memory_length)]
         self.done = False
         return self.get_observation()
 
@@ -96,8 +101,8 @@ class DDREnv(gym.Env):
 
     def get_routing(self, action: Action) -> Routing:
         """
-        Subclass to use different actions, assumes action is a routing in base
-        case
+        Subclass to use different actions, assumes action is a fully specified
+        routing in base case
         """
         return action
 
@@ -116,13 +121,48 @@ class DDREnv(gym.Env):
         return np.concatenate(self.dm_memory).ravel()
 
 
+class DDREnvDest(DDREnv):
+    """
+    DDR Env where routing is destination-based which significantly reduces
+    the action space. This class simply performs the translation to a full
+    routing.
+    """
+    def __init__(self,
+                 dm_generator_getter: Callable[
+                     [],
+                     Generator[Demand, None, None]],
+                 dm_memory_length: int,
+                 graph: nx.DiGraph):
+        super().__init__(dm_generator_getter, dm_memory_length, graph)
+        self.action_space = gym.spaces.Box( #TODO: set this properly
+            low=0.0,
+            high=1.0,
+            shape=(graph.number_of_nodes() * (
+                    graph.number_of_nodes() - 1) * graph.number_of_edges(),))
+
+    def get_routing(self, action: Action) -> Routing:
+        pass
+
+
 class DDREnvSoftmin(DDREnv):
     """
-    DDR Env where all softmin routing is used (from Learning to Route with
+    DDR Env where softmin routing is used (from Learning to Route with
     Deep RL paper). Routing is a single weight per edge, transformed to
     splitting ratios for input to the optimizer calculation.
     """
 
-    # TODO: need to also override the action_space
-    def get_routing(self, edge_weights) -> Routing:
+    def __init__(self,
+                 dm_generator_getter: Callable[
+                     [],
+                     Generator[Demand, None, None]],
+                 dm_memory_length: int,
+                 graph: nx.DiGraph):
+        super().__init__(dm_generator_getter, dm_memory_length, graph)
+        self.action_space = gym.spaces.Box( #TODO: set this properly
+            low=0.0,
+            high=1.0,
+            shape=(graph.number_of_nodes() * (
+                    graph.number_of_nodes() - 1) * graph.number_of_edges(),))
+
+    def get_routing(self, action: Action) -> Routing:
         pass
