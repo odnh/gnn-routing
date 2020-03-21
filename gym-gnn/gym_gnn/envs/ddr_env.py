@@ -115,7 +115,7 @@ class DDREnv(gym.Env):
         return -(utilisation / opt_utilisation)
 
     def get_observation(self) -> Observation:
-        return np.concatenate(self.dm_memory).ravel()
+        return np.concatenate(self.dm_memory)
 
 
 class DDREnvDest(DDREnv):
@@ -138,7 +138,7 @@ class DDREnvDest(DDREnv):
             low=0.0,
             high=1.0,
             shape=(graph.number_of_nodes(),  # vertices
-                   graph.number_of_nodes() - 1,  # destinations
+                   graph.number_of_nodes(),  # destinations (nb, self not valid)
                    max_out_degree))  # outgoing edges
 
         # Precompute list of flows for use in routing translation
@@ -165,8 +165,12 @@ class DDREnvDest(DDREnv):
         """
         num_edges = self.graph.number_of_edges()
         full_routing = np.zeros((len(self.flows), num_edges), dtype=np.float32)
+
+        print("Flows:{}".format(self.flows))
         for i, (_, dst) in enumerate(self.flows):
+            print("i:{}, dst:{}".format(i, dst))
             for j, edge in enumerate(self.graph.edges()):
+                print("j:{}, edge:{}".format(j, edge))
                 full_routing[i][j] = action[edge[0]][dst][self.edge_index[edge]]
 
         return full_routing
@@ -221,7 +225,7 @@ class DDREnvSoftmin(DDREnv):
         softmin_edge_weights = np.zeros(num_edges)
 
         for i in range(self.graph.number_of_nodes()):
-            out_edge_ids = [self.edge_index(e) for e in self.graph.out_edges(i)]
+            out_edge_ids = [self.edge_index[e] for e in self.graph.out_edges(i)]
             out_edge_weights = [action[i] for i in out_edge_ids]
             softmin_weights = self.softmin(out_edge_weights)
             for j, id in enumerate(out_edge_ids):
@@ -229,19 +233,18 @@ class DDREnvSoftmin(DDREnv):
 
         for i, flow in enumerate(self.flows):
             for j, edge in enumerate(self.graph.edges()):
-               full_routing[i][j] = softmin_edge_weights[j]  # Surely wrong?
+                full_routing[i][j] = softmin_edge_weights[j]  # Surely wrong?
 
         return full_routing
 
-    def softmin(self, array: np.ndarray):
+    def softmin(self, array: List[float]) -> List[float]:
         """
         Calculates and returns the softmin of an np array
         Args:
-            array: a 1D ndarray
-
+            array: a list of floats
         Returns:
-            a 1D ndarray of the same size
+            a list of floats of the same size
         """
         exponentiated = [np.exp(-self.gamma * i) for i in array]
         total = sum(exponentiated)
-        return [np.exp(-self.gamma * i)/total for i in exponentiated]
+        return [np.exp(-self.gamma * i) / total for i in exponentiated]
