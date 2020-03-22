@@ -2,6 +2,7 @@ from typing import Tuple, List, Dict, Callable, Generator, Type
 import gym
 import networkx as nx
 import numpy as np
+from scipy.special import softmax
 
 from . import max_link_utilisation
 
@@ -47,13 +48,13 @@ class DDREnv(gym.Env):
         self.action_space = gym.spaces.Box(
             low=0.0,
             high=1.0,
-            shape=(graph.number_of_nodes() * (graph.number_of_nodes() - 1),
+            shape=(graph.number_of_nodes() * (graph.number_of_nodes() - 1) *
                    graph.number_of_edges()))
         self.observation_space = gym.spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(dm_memory_length *
-                   graph.number_of_nodes() * (graph.number_of_nodes() - 1),))
+            shape=(dm_memory_length * graph.number_of_nodes() *
+                   (graph.number_of_nodes() - 1),))
 
     def step(self, action: Type[np.ndarray]) -> Tuple[Observation,
                                                       float,
@@ -99,9 +100,12 @@ class DDREnv(gym.Env):
     def get_routing(self, action: Action) -> Routing:
         """
         Subclass to use different actions, assumes action is a fully specified
-        routing in base case
+        routing in base case but also does any necessary unflattening.
         """
-        return action
+        num_edges = self.graph.number_of_edges()
+        num_demands = self.graph.number_of_nodes() *\
+                      (self.graph.number_of_nodes() - 1)
+        return action.reshape((num_demands, num_edges))
 
     def get_reward(self, routing: Routing) -> float:
         """
@@ -115,7 +119,11 @@ class DDREnv(gym.Env):
         return -(utilisation / opt_utilisation)
 
     def get_observation(self) -> Observation:
-        return np.concatenate(self.dm_memory)
+        """
+        Flattens observation for input to learners
+        Returns: A flat np array of the demand matrix
+        """
+        return np.stack(self.dm_memory).ravel()
 
 
 class DDREnvDest(DDREnv):
@@ -132,14 +140,14 @@ class DDREnvDest(DDREnv):
                  dm_memory_length: int,
                  graph: nx.DiGraph):
         super().__init__(dm_generator_getter, dm_memory_length, graph)
-        max_out_degree = max(dict(graph.out_degree()).values())
+
+        # For calculating the action space size and routing translation
+        self.out_edge_count = [i[1] for i in graph.out_degree()]
 
         self.action_space = gym.spaces.Box(
             low=0.0,
             high=1.0,
-            shape=(graph.number_of_nodes(),  # vertices
-                   graph.number_of_nodes(),  # destinations (nb, self not valid)
-                   max_out_degree))  # outgoing edges
+            shape=(sum(self.out_edge_count) * (graph.number_of_nodes()-1)))
 
         # Precompute list of flows for use in routing translation
         num_nodes = self.graph.number_of_nodes()
@@ -159,19 +167,35 @@ class DDREnvDest(DDREnv):
         """
         Converts a destination routing to full routing
         Args:
-            action: dims 0: vertices, 1: dests, 2: outgoing edges
+            action: flat 1x(|V|*(|V|-1)*out_edges)
         Returns:
             A fully specified routing (dims 0: flows, 1: edges)
         """
+        #TODO:
+        # 1. Read into list of list of np arrays
+        # 2. softmax the arrays
+        # 3. Insert into "full" routing
+
         num_edges = self.graph.number_of_edges()
+        num_nodes = self.graph.number_of_nodes()
+        softmaxed_routing = []
+        idx = 0
+        for i, count in enumerate(self.out_edge_count):
+            vertex = []
+            for dest in range(num_nodes - 1):
+                dest = []
+                for _ in range(count):
+                    dest.append(action[idx])
+                    idx += 1
+                vertex.append(softmax(dest))
+            softmaxed_routing.append(vertex)
+
         full_routing = np.zeros((len(self.flows), num_edges), dtype=np.float32)
 
-        print("Flows:{}".format(self.flows))
         for i, (_, dst) in enumerate(self.flows):
-            print("i:{}, dst:{}".format(i, dst))
             for j, edge in enumerate(self.graph.edges()):
-                print("j:{}, edge:{}".format(j, edge))
-                full_routing[i][j] = action[edge[0]][dst][self.edge_index[edge]]
+                full_routing[i][j] = \
+                    softmaxed_routing[edge[0]][dst][self.edge_index[edge]]
 
         return full_routing
 
