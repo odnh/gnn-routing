@@ -1,20 +1,23 @@
-import numpy as np
 import torch
 
 from rlpyt.utils.tensor import infer_leading_dims, restore_leading_dims
 from rlpyt.models.mlp import MlpModel
 from rlpyt.models.running_mean_std import RunningMeanStdModel
 
-class DdrMlpModel(torch.nn.Module):
+
+class DdrMlpDestModel(torch.nn.Module):
     """
-    Model commonly used in Mujoco locomotion agents: an MLP which outputs
-    distribution means, separate parameter for learned log_std, and separate
-    MLP for state-value estimate.
+    Model for DDR destination routing: an MLP which outputs distribution means,
+    separate parameter for learned log_std, and separate MLP for state-value
+    estimate.
+
+    NB: space complexity is pushed into the env which runs a softmax over the
+    outgoing edges for each node
     """
 
     def __init__(
             self,
-            observation_shape,
+            observation_size,
             action_size,
             hidden_sizes=None,  # None for default (see below).
             hidden_nonlinearity=torch.nn.Tanh,  # Module form.
@@ -26,8 +29,9 @@ class DdrMlpModel(torch.nn.Module):
     ):
         """Instantiate neural net modules according to inputs."""
         super().__init__()
-        self._obs_ndim = len(observation_shape)
-        input_size = int(np.prod(observation_shape))
+        self._obs_ndim = 1  # Hardcode as input is assumed flat from env
+        input_size = observation_size
+        output_size = action_size
         hidden_sizes = hidden_sizes or [64, 64]
         mu_mlp = MlpModel(
             input_size=input_size,
@@ -45,9 +49,10 @@ class DdrMlpModel(torch.nn.Module):
             output_size=1,
             nonlinearity=hidden_nonlinearity,
         )
-        self.log_std = torch.nn.Parameter(init_log_std * torch.ones(action_size))
+        self.log_std = torch.nn.Parameter(
+            init_log_std * torch.ones(action_size))
         if normalize_observation:
-            self.obs_rms = RunningMeanStdModel(observation_shape)
+            self.obs_rms = RunningMeanStdModel(observation_size)
             self.norm_obs_clip = norm_obs_clip
             self.norm_obs_var_clip = norm_obs_var_clip
         self.normalize_observation = normalize_observation
@@ -68,7 +73,8 @@ class DdrMlpModel(torch.nn.Module):
             if self.norm_obs_var_clip is not None:
                 obs_var = torch.clamp(obs_var, min=self.norm_obs_var_clip)
             observation = torch.clamp((observation - self.obs_rms.mean) /
-                                      obs_var.sqrt(), -self.norm_obs_clip, self.norm_obs_clip)
+                                      obs_var.sqrt(), -self.norm_obs_clip,
+                                      self.norm_obs_clip)
 
         obs_flat = observation.view(T * B, -1)
         mu = self.mu(obs_flat)

@@ -49,7 +49,7 @@ class DDREnv(gym.Env):
             low=0.0,
             high=1.0,
             shape=(graph.number_of_nodes() * (graph.number_of_nodes() - 1) *
-                   graph.number_of_edges()))
+                   graph.number_of_edges(),))
         self.observation_space = gym.spaces.Box(
             low=-np.inf,
             high=np.inf,
@@ -145,9 +145,9 @@ class DDREnvDest(DDREnv):
         self.out_edge_count = [i[1] for i in graph.out_degree()]
 
         self.action_space = gym.spaces.Box(
-            low=0.0,
+            low=-1.0,  # This is ok as we softmax in the env itself
             high=1.0,
-            shape=(sum(self.out_edge_count) * (graph.number_of_nodes()-1)))
+            shape=(sum(self.out_edge_count) * (graph.number_of_nodes()-1),))
 
         # Precompute list of flows for use in routing translation
         num_nodes = self.graph.number_of_nodes()
@@ -171,10 +171,6 @@ class DDREnvDest(DDREnv):
         Returns:
             A fully specified routing (dims 0: flows, 1: edges)
         """
-        #TODO:
-        # 1. Read into list of list of np arrays
-        # 2. softmax the arrays
-        # 3. Insert into "full" routing
 
         num_edges = self.graph.number_of_edges()
         num_nodes = self.graph.number_of_nodes()
@@ -194,8 +190,14 @@ class DDREnvDest(DDREnv):
 
         for i, (_, dst) in enumerate(self.flows):
             for j, edge in enumerate(self.graph.edges()):
-                full_routing[i][j] = \
-                    softmaxed_routing[edge[0]][dst][self.edge_index[edge]]
+                relative_dst = dst
+                if dst > edge[0]:
+                    relative_dst -= 1
+                if dst == edge[0]:
+                    full_routing[i][j] = 0.0
+                else:
+                    full_routing[i][j] = softmaxed_routing[
+                        edge[0]][relative_dst][self.edge_index[edge]]
 
         return full_routing
 
@@ -223,7 +225,7 @@ class DDREnvSoftmin(DDREnv):
         self.gamma = gamma
 
         self.action_space = gym.spaces.Box(
-            low=0.0,
+            low=-1.0,
             high=1.0,
             shape=(graph.number_of_edges(),))
 

@@ -1,15 +1,14 @@
 """
-Train DDR for destination-based routing using PPO
+Train DDR for destination-based or softmin routing using PPO
 """
-import gym_gnn.envs.demand_matrices as dm
-
 import numpy as np
 import networkx as nx
 
-### RLPYT HELPER BITS AND PIECES
+import gym_gnn.envs.demand_matrices as dm
 
+### Set up graph and demand matrices
 
-### NETWORK HELPER BITS AND PIECES
+#TODO: make it read real graphs
 
 graph = nx.DiGraph()
 graph.add_edge(0, 1, weight=1000)
@@ -26,11 +25,13 @@ rs = np.random.RandomState()
 dm_memory_length = 10
 num_demands = graph.number_of_nodes() * (graph.number_of_nodes() - 1)
 num_edges = graph.number_of_edges()
-action_size = num_demands * num_edges
-observation_shape = (dm_memory_length * num_demands,)
+out_edge_count = [i[1] for i in graph.out_degree()]
+#action_size = sum(out_edge_count) * (graph.number_of_nodes()-1)
+action_size = num_edges
+observation_size = dm_memory_length * num_demands
 
 dm_generator_getter = lambda: dm.cyclical_sequence(
-    lambda: dm.bimodal_demand(num_demands, rs), 40, 5, 0.2, rs)
+    lambda: dm.bimodal_demand(num_demands, rs), 40, 5, 0.0, rs)
 
 ### ACTUALLY TRAIN
 
@@ -40,10 +41,9 @@ from rlpyt.utils.logging.context import logger_context
 from rlpyt.envs.gym import make as gym_make
 from rlpyt.samplers.serial.sampler import SerialSampler
 
-from ddr_mlp_agent import DdrMlpAgent
+from ddr_mlp_agent import DdrMlpDestAgent
 
-
-def build_and_train(env_id="ddr-v0", run_ID=0, cuda_idx=None):
+def build_and_train(env_id="ddr-softmin-v0", run_ID=0, cuda_idx=None):
     affinity = dict(cuda_idx=cuda_idx)
     sampler = SerialSampler(
         EnvCls=gym_make,
@@ -57,8 +57,8 @@ def build_and_train(env_id="ddr-v0", run_ID=0, cuda_idx=None):
         max_decorrelation_steps=0,
     )
     algo = PPO()
-    agent = DdrMlpAgent(
-        model_kwargs={"observation_shape": observation_shape,
+    agent = DdrMlpDestAgent(
+        model_kwargs={"observation_size": observation_size,
                       "action_size": action_size})
     runner = MinibatchRl(
         algo=algo,
@@ -70,14 +70,13 @@ def build_and_train(env_id="ddr-v0", run_ID=0, cuda_idx=None):
     )
     config = dict()
     name = "ppo_" + env_id
-    log_dir = "ddr_mlp"
+    log_dir = "ddr_mlp_soft"
     with logger_context(log_dir, run_ID, name, config, snapshot_mode="last"):
         runner.train()
 
 
 def run_experiment():
     build_and_train()
-
 
 if __name__ == "__main__":
     build_and_train()
