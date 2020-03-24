@@ -5,7 +5,7 @@ from rlpyt.models.mlp import MlpModel
 from rlpyt.models.running_mean_std import RunningMeanStdModel
 
 
-class DdrMlpDestModel(torch.nn.Module):
+class DdrMlpModel(torch.nn.Module):
     """
     Model for DDR destination routing: an MLP which outputs distribution means,
     separate parameter for learned log_std, and separate MLP for state-value
