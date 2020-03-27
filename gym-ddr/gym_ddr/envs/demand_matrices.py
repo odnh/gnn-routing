@@ -5,6 +5,7 @@ from numpy.random import RandomState
 
 Demand = Type[np.ndarray]
 
+
 # NB: demands are not matrices, but 1D arrays in deterministic ordering
 
 def sparsify(
@@ -24,13 +25,15 @@ def sparsify(
             sparsified_demands[i] = 0
     return sparsified_demands
 
+
 def gravity_demand(number_of_flows: int, graph: nx.Graph) -> Demand:
     """
     Generates gravity demand (deterministic, based on bandwidth) for one time
     step
     """
-    #TODO: implement
+    # TODO: implement
     pass
+
 
 def bimodal_demand(
         number_of_flows: int,
@@ -48,6 +51,7 @@ def bimodal_demand(
             # Elephant flow
             demand[i] = random_state.normal(400, 20)
     return demand
+
 
 def cyclical_sequence(
         demand_generator: Callable[[], Demand],
@@ -69,11 +73,13 @@ def cyclical_sequence(
       sequence as an iterator
     """
     demand = demand_generator()
-    short_sequence = [sparsify(demand_generator(), sparsity, random_state) for _ in range(q)]
+    short_sequence = [sparsify(demand_generator(), sparsity, random_state) for _
+                      in range(q)]
     i = 0
     for _ in range(length):
         yield short_sequence[i]
         i = (i + 1) % q
+
 
 def average_sequence(
         demand_generator: Callable[[], Demand],
@@ -94,11 +100,13 @@ def average_sequence(
       sequence as an iterator
     """
     # initialise history to length q
-    history = [sparsify(demand_generator(), sparsity, random_state) for _ in range(q)]
+    history = [sparsify(demand_generator(), sparsity, random_state) for _ in
+               range(q)]
     for _ in range(length):
         yield np.mean(history, axis=1)
         history.pop(0)
         history.append(sparsify(demand_generator(), sparsity, random_state))
+
 
 def random_sequence(
         demand_generator: Callable[[], Demand],
