@@ -19,7 +19,7 @@ def opt(graph: nx.DiGraph, demands: Demand) -> float:
       min max-link-utilisation
     """
     ## Build helper data
-    edges = list(graph.edges())
+    edges = list(sorted(graph.edges()))
     edge_index_dict = {edge: i for i, edge in enumerate(edges)}
 
     # create commodities from demands (make sure to ignore demand to self)
@@ -49,7 +49,7 @@ def opt(graph: nx.DiGraph, demands: Demand) -> float:
     ## CONSTRAINTS
     # Capacity constraint
     capacity_constraints = []
-    for i, edge in enumerate(graph.edges()):
+    for i, edge in enumerate(edges):
         # Constraint between 0 and edge capacity
         constraint_i = solver.Constraint(
             0, graph.get_edge_data(*edge)['weight'], '(1,{},{})'.format(*edge))
@@ -67,7 +67,7 @@ def opt(graph: nx.DiGraph, demands: Demand) -> float:
             if j != commodity[0] and j != commodity[1]:
                 # Constraint must sum to zero
                 constraint_j = solver.Constraint(0, 0, '(2,{},{})'.format(i, j))
-                for k in list(graph.adj[j].keys()):
+                for k in list(sorted(graph.adj[j].keys())):
                     # Ingress edges
                     constraint_j.SetCoefficient(
                         flow_variables[i][edge_index_dict[(k, j)]], 1)
@@ -82,7 +82,7 @@ def opt(graph: nx.DiGraph, demands: Demand) -> float:
     for i, commodity in enumerate(commodities):
         # Constraint must sum to one (assuming all the demand can be met)
         constraint_i = solver.Constraint(1, 1, '(3,{})'.format(i))
-        for edge_dest in list(graph.adj[commodity[0]].keys()):
+        for edge_dest in list(sorted(graph.adj[commodity[0]].keys())):
             constraint_i.SetCoefficient(
                 flow_variables[i][edge_index_dict[(commodity[0], edge_dest)]],
                 1)
@@ -96,7 +96,7 @@ def opt(graph: nx.DiGraph, demands: Demand) -> float:
     for i, commodity in enumerate(commodities):
         # Constraint must sum to one (assuming all the demand can be met)
         constraint_i = solver.Constraint(1, 1, '(4,{})'.format(i))
-        for edge_dest in list(graph.adj[commodity[1]].keys()):
+        for edge_dest in list(sorted(graph.adj[commodity[1]].keys())):
             constraint_i.SetCoefficient(
                 flow_variables[i][edge_index_dict[(edge_dest, commodity[1])]], 1)
             constraint_i.SetCoefficient(
@@ -109,7 +109,7 @@ def opt(graph: nx.DiGraph, demands: Demand) -> float:
     max_utilisation_variable = solver.NumVar(0, solver.Infinity(),
                                              'max_link_utilisation')
     min_of_max_constraints = []
-    for i, edge in enumerate(graph.edges()):
+    for i, edge in enumerate(edges):
         # Constraint that '-inf < f_0 + f_1 +... - max < 0'
         # i.e 'f_0 + f_1 + ... < max'
         constraint_i = solver.Constraint(-solver.Infinity(), 0,
@@ -144,8 +144,9 @@ def calc(graph: nx.DiGraph, demands: Demand, routing: Routing) -> float:
     NB: does not actually check given routing is valid but assumes it is.
     """
     max_link_utilisation = 0.0
+    edges = sorted(graph.edges())
 
-    for i, edge in enumerate(graph.edges()):
+    for i, edge in enumerate(edges):
         link_utilisation = 0.0
         # This loops over each flow
         for j in range(routing.shape[0]):

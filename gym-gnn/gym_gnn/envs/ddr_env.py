@@ -142,7 +142,9 @@ class DDREnvDest(DDREnv):
         super().__init__(dm_generator_getter, dm_memory_length, graph)
 
         # For calculating the action space size and routing translation
-        self.out_edge_count = [i[1] for i in graph.out_degree()]
+        # sorted to match encoding ordering of nodes
+        self.out_edge_count = [i[1] for i in
+                               sorted(graph.out_degree(), key=lambda x: x[0])]
 
         self.action_space = gym.spaces.Box(
             low=-1.0,  # This is ok as we softmax in the env itself
@@ -150,6 +152,7 @@ class DDREnvDest(DDREnv):
             shape=(sum(self.out_edge_count) * (graph.number_of_nodes()-1),))
 
         # Precompute list of flows for use in routing translation
+        # Ordering is eg 0,1 0,2 0,3 1,0 1,2 1,3 2,0 2,1 2,3
         num_nodes = self.graph.number_of_nodes()
         self.flows = [(i, j) for i in range(num_nodes) for j in range(num_nodes)
                       if i != j]
@@ -159,7 +162,7 @@ class DDREnvDest(DDREnv):
         self.edge_index = {}
         for node in range(graph.number_of_nodes()):
             count = 0
-            for edge in graph.out_edges(node):
+            for edge in sorted(graph.out_edges(node)):
                 self.edge_index[edge] = count
                 count += 1
 
@@ -189,7 +192,8 @@ class DDREnvDest(DDREnv):
         full_routing = np.zeros((len(self.flows), num_edges), dtype=np.float32)
 
         for i, (_, dst) in enumerate(self.flows):
-            for j, edge in enumerate(self.graph.edges()):
+            # Ensure that edges are sorted for correct order in action
+            for j, edge in enumerate(sorted(self.graph.edges())):
                 relative_dst = dst
                 if dst > edge[0]:
                     relative_dst -= 1
@@ -234,7 +238,7 @@ class DDREnvSoftmin(DDREnv):
         self.edge_index = {}
         for node in range(graph.number_of_nodes()):
             count = 0
-            for edge in graph.out_edges(node):
+            for edge in sorted(graph.out_edges(node)):
                 self.edge_index[edge] = count
                 count += 1
 
@@ -251,14 +255,15 @@ class DDREnvSoftmin(DDREnv):
         softmin_edge_weights = np.zeros(num_edges)
 
         for i in range(self.graph.number_of_nodes()):
-            out_edge_ids = [self.edge_index[e] for e in self.graph.out_edges(i)]
+            out_edge_ids = [self.edge_index[e] for e in
+                            sorted(self.graph.out_edges(i))]
             out_edge_weights = [action[i] for i in out_edge_ids]
             softmin_weights = self.softmin(out_edge_weights)
             for j, id in enumerate(out_edge_ids):
                 softmin_edge_weights[id] = softmin_weights[j]
 
         for i, flow in enumerate(self.flows):
-            for j, edge in enumerate(self.graph.edges()):
+            for j, edge in enumerate(sorted(self.graph.edges())):
                 full_routing[i][j] = softmin_edge_weights[j]  # Surely wrong?
 
         return full_routing
