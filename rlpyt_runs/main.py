@@ -14,7 +14,7 @@ def get_graph(graph_spec: str) -> nx.DiGraph:
         return graphs.generator.topologyzoo(graph_spec[1], int(graph_spec[2]))
     elif graph_spec[0] == 'random':
         return graphs.generator.random(
-            graph_spec[1], graph_spec[2], int(graph_spec[3]))
+            int(graph_spec[1]), int(graph_spec[2]), int(graph_spec[3]))
     else:
         print("Not a valid graph spec")
 
