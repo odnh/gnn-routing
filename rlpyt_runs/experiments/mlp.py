@@ -1,7 +1,7 @@
 """
 Train DDR for destination-based or softmin routing using PPO
 """
-import gym_gnn.envs.demand_matrices as dm
+import gym_ddr.envs.demand_matrices as dm
 import networkx as nx
 import numpy as np
 from rlpyt.algos.pg.ppo import PPO
