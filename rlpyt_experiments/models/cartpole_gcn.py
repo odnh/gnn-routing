@@ -3,23 +3,27 @@ import dgl
 from dgl.nn.pytorch.conv import GraphConv
 from rlpyt.utils.tensor import infer_leading_dims, restore_leading_dims
 
+
 class IntermediateGCN(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.cartpole_graph = dgl.DGLGraph()
         self.cartpole_graph.add_nodes(4)
         # fully connected
-        self.cartpole_graph.add_edges([0,0,0,1,1,1,2,2,2,3,3,3], [1,2,3,0,2,3,0,1,3,0,1,2])
+        self.cartpole_graph.add_edges([0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3],
+                                      [1, 2, 3, 0, 2, 3, 0, 1, 3, 0, 1, 2])
         self.model = GraphConv(1, 1)
 
     def forward(self, input):
-        # The GraphConv takes inputs in the form of columns where batched dims are subsequent dims.
-        # need to present a similar API to nn.Linear, nn.Softmax
-        # Therefor transpose and unsqueeze for prep, opposite for return
+        # The GraphConv takes inputs in the form of columns where batched dims
+        # are subsequent dims need to present a similar API to nn.Linear,
+        # nn.Softmax. Therefore transpose and unsqueeze for prep, opposite for
+        # return
         input_for_gcn = input.t().unsqueeze(-1)
         ouput_from_gcn = self.model(self.cartpole_graph, input_for_gcn)
         output = ouput_from_gcn.squeeze(-1).t()
         return output
+
 
 class CartPoleGcnModel(torch.nn.Module):
     """
@@ -36,17 +40,17 @@ class CartPoleGcnModel(torch.nn.Module):
 
         self.cartpole_graph = dgl.DGLGraph()
         self.cartpole_graph.add_nodes(4)
-        self.cartpole_graph.add_edges([0,1,3], [2,0,2])
+        self.cartpole_graph.add_edges([0, 1, 3], [2, 0, 2])
 
         self.pi = torch.nn.Sequential(
-                IntermediateGCN(),
-                torch.nn.Linear(4, 2),
-                torch.nn.Softmax(dim=-1))
+            IntermediateGCN(),
+            torch.nn.Linear(4, 2),
+            torch.nn.Softmax(dim=-1))
 
         self.v = torch.nn.Sequential(
-                IntermediateGCN(),
-                torch.nn.Linear(4, 1),
-                torch.nn.ReLU())
+            IntermediateGCN(),
+            torch.nn.Linear(4, 1),
+            torch.nn.ReLU())
 
     def forward(self, observation, prev_action, prev_reward):
         """
