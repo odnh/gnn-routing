@@ -4,5 +4,6 @@ Place in this directory the real-world graphs to learn and test on. Layout
 should be as follows:
 
 directory   | source
-------------|-----------------------------------------
-topologyzoo | http://www.topology-zoo.org/dataset.html
+------------|----------------------------------------------
+topologyzoo | http://www.topology-zoo.org/files/archive.zip
+

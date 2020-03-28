@@ -16,3 +16,7 @@ conda activate ddr
 pip install -e gym-ddr
 pip install -e ddr-learning-helpers
 pip install -e stable-baselines-ddr
+
+# get data
+cd data
+bash populate.sh
