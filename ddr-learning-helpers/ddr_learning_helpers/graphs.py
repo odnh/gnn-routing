@@ -1,6 +1,6 @@
-import networkx as nx
 import numpy as np
-import pathlib
+import networkx as nx
+
 
 def random(num_nodes: int, num_edges: int, weight: int = 1000) -> nx.DiGraph:
     """
@@ -37,7 +37,7 @@ def topologyzoo(graph_name: str, weight: int) -> nx.DiGraph:
     """
     script_path = pathlib.Path(__file__).parent.absolute()
     graph = nx.readwrite.read_graphml(
-        "{}/../data/topologyzoo/{}.graphml".format(script_path, graph_name))
+        "{}/../../data/topologyzoo/{}.graphml".format(script_path, graph_name))
     normalised_graph = nx.Graph()
 
     node_mapping = {node: i for i, node in enumerate(graph.nodes())}
