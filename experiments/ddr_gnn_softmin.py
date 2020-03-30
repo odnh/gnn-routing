@@ -1,3 +1,6 @@
+import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
 import gym
 import gym_ddr.envs.demand_matrices as dm
 import numpy as np
@@ -22,7 +25,7 @@ env = gym.make('ddr-softmin-v0', dm_generator_getter=dm_generator_getter,
 
 # make model
 model = PPO2(GnnDdrPolicy, env, verbose=1,
-             policy_kwargs={'network_graph': graph})
+             policy_kwargs={'network_graph': graph}, tensorboard_log="./gnn_tensorboard/")
 
 # learn
 model.learn(total_timesteps=10000)

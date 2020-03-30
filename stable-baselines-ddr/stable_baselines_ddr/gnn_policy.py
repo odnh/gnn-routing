@@ -1,6 +1,6 @@
 import warnings
 from itertools import zip_longest
-from typing import List, Dict
+from typing import List
 
 import networkx as nx
 import numpy as np
@@ -13,7 +13,7 @@ from stable_baselines.common.tf_layers import linear
 
 
 # TODO: update to contain a gcn or do whatever else it has to
-def gnn_extractor(flat_observations: tf.Tensor, net_arch: List[int, Dict],
+def gnn_extractor(flat_observations: tf.Tensor, net_arch: List,
                   act_fun: tf.function, network_graph: nx.MultiDiGraph):
     """
     TODO: rewrite the whole docstring
@@ -47,8 +47,22 @@ def gnn_extractor(flat_observations: tf.Tensor, net_arch: List[int, Dict],
 
     # TODO: need to keep the graph present to rebuild the state from inputs
 
-    # TODO: work out how to use graph_nets
-    utils_tf.placeholders_from_networkxs(network_graph, name="gnn_core")
+    for edge in network_graph.edges():
+        network_graph.edges[edge[0], edge[1]]['features'] = tf.constant(0.0, dtype=np.float, shape=(4,))
+
+    for node in network_graph.nodes():
+        network_graph.nodes[node]['features'] = tf.constant(0.0, dtype=np.float, shape=(1,))
+
+    # turn into ordered multigraph and relabel nodes to keep graph_nets happy
+    # TODO: assess whether this ordering should be fixed on graph generation (I
+    #       think it should be)
+    multi_graph = nx.relabel.convert_node_labels_to_integers(nx.OrderedMultiDiGraph(network_graph))
+
+    placeholders = utils_tf.placeholders_from_networkxs([multi_graph], name="gnn_core")
+
+    # TODO: also, how provide features just as tensor (i.e. not have to pass actual graph around?)
+    # Need to reencode input tensor as graph before into graph_net then decode
+    # before passing results back (needs built into tf.Graph :'(
 
     # Iterate through the shared layers and build the shared parts of the network
     for idx, layer in enumerate(net_arch):
@@ -163,6 +177,7 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
         self._setup_init()
 
     def step(self, obs, state=None, mask=None, deterministic=False):
+        # TODO: can maybe modify obs into a graph here? (and the below methods)
         if deterministic:
             action, value, neglogp = self.sess.run(
                 [self.deterministic_action, self.value_flat, self.neglogp],

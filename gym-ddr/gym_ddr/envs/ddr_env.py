@@ -49,12 +49,14 @@ class DDREnv(gym.Env):
             low=0.0,
             high=1.0,
             shape=(graph.number_of_nodes() * (graph.number_of_nodes() - 1) *
-                   graph.number_of_edges(),))
+                   graph.number_of_edges(),),
+            dtype=np.float64)
         self.observation_space = gym.spaces.Box(
             low=-np.inf,
             high=np.inf,
             shape=(dm_memory_length * graph.number_of_nodes() *
-                   (graph.number_of_nodes() - 1),))
+                   (graph.number_of_nodes() - 1),),
+            dtype=np.float64)
 
     def step(self, action: Type[np.ndarray]) -> Tuple[Observation,
                                                       float,
@@ -149,7 +151,8 @@ class DDREnvDest(DDREnv):
         self.action_space = gym.spaces.Box(
             low=-1.0,  # This is ok as we softmax in the env itself
             high=1.0,
-            shape=(sum(self.out_edge_count) * (graph.number_of_nodes()-1),))
+            shape=(sum(self.out_edge_count) * (graph.number_of_nodes()-1),),
+            dtype=np.float64)
 
         # Precompute list of flows for use in routing translation
         # Ordering is eg 0,1 0,2 0,3 1,0 1,2 1,3 2,0 2,1 2,3
@@ -231,7 +234,8 @@ class DDREnvSoftmin(DDREnv):
         self.action_space = gym.spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(graph.number_of_edges(),))
+            shape=(graph.number_of_edges(),),
+            dtype=np.float64)
 
         # Indices of the edges for lookup in routing translation
         # Takes each edge of graph to an index under its source node
