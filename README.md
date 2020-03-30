@@ -15,7 +15,7 @@ distribution).
 
 ### Requirements:
 
-Relies on stable-baselines. A vagrant box can be set up using the Vagrantfile.
-To set up on a linux machine, look at the `bootstrap.sh` file.
+Based on stable-baselines and using graph_nets for GNN bits and pieces. 
+To set up on a linux (Ubuntu) machine from scratch, run the `bootstrap.sh` file.
 
 To setup python env, `env.yml` can be used with `conda env -f env.yml`

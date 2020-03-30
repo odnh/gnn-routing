@@ -1,6 +1,7 @@
 import pathlib
-import numpy as np
+
 import networkx as nx
+import numpy as np
 
 
 def random(num_nodes: int, num_edges: int, weight: int = 1000) -> nx.DiGraph:
