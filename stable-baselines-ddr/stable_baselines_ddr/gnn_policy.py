@@ -11,6 +11,9 @@ from stable_baselines.common.policies import mlp_extractor
 from stable_baselines.common.policies import nature_cnn
 from stable_baselines.common.tf_layers import linear
 
+from graph_nets.graphs import GraphsTuple
+from graph_nets.demos.models import EncodeProcessDecode
+
 
 # TODO: update to contain a gcn or do whatever else it has to
 def gnn_extractor(flat_observations: tf.Tensor, net_arch: List,
@@ -42,27 +45,42 @@ def gnn_extractor(flat_observations: tf.Tensor, net_arch: List,
         If all layers are shared, then ``latent_policy == latent_value``
     """
     latent = flat_observations
+    # tf.Print(flat_observations)
     policy_only_layers = []  # Layer sizes of the network that only belongs to the policy network
     value_only_layers = []  # Layer sizes of the network that only belongs to the value network
 
-    # TODO: need to keep the graph present to rebuild the state from inputs
+    sorted_edges = sorted(network_graph.edges())
+    num_edges = len(sorted_edges)
+    num_nodes = network_graph.number_of_nodes()
 
-    for edge in network_graph.edges():
-        network_graph.edges[edge[0], edge[1]]['features'] = tf.constant(0.0, dtype=np.float, shape=(4,))
+    ######FEATS FOR GRAPHTUPLE
+    edge_features = tf.constant(np.zeros((num_edges, 1), np.float32),
+                                name="initial_edge_features")
+    node_features = tf.constant(
+        np.zeros((num_nodes, num_nodes - 1), np.float32),
+        name="initial_node_features")  # some transformation from flat_observations
+    global_features = tf.constant(np.zeros((1, 1)), np.float32,
+                                  name="initial_global_features")
+    receiver_nodes = tf.constant(np.array([e[1] for e in sorted_edges]), np.int32,
+        name="receiver_nodes")
+    sender_nodes = tf.constant(np.array([e[0] for e in sorted_edges]), np.int32,
+        name="sender_nodes")
+    n_node_list = tf.constant(np.array([num_nodes]), np.int32, name="n_node_list")
+    n_edge_list = tf.constant(np.array([num_edges]), np.int32, name="n_edge_list")
 
-    for node in network_graph.nodes():
-        network_graph.nodes[node]['features'] = tf.constant(0.0, dtype=np.float, shape=(1,))
+    input_graph = GraphsTuple(edges=edge_features,
+                              nodes=node_features,
+                              globals=global_features,
+                              receivers=receiver_nodes,
+                              senders=sender_nodes,
+                              n_node=n_node_list,
+                              n_edge=n_edge_list)
 
-    # turn into ordered multigraph and relabel nodes to keep graph_nets happy
-    # TODO: assess whether this ordering should be fixed on graph generation (I
-    #       think it should be)
-    multi_graph = nx.relabel.convert_node_labels_to_integers(nx.OrderedMultiDiGraph(network_graph))
 
-    placeholders = utils_tf.placeholders_from_networkxs([multi_graph], name="gnn_core")
+    model = EncodeProcessDecode(edge_output_size=1)
+    output_graph = model(input_graph, 1)
 
-    # TODO: also, how provide features just as tensor (i.e. not have to pass actual graph around?)
-    # Need to reencode input tensor as graph before into graph_net then decode
-    # before passing results back (needs built into tf.Graph :'(
+    latent_policy2 = tf.transpose(output_graph[0].edges)
 
     # Iterate through the shared layers and build the shared parts of the network
     for idx, layer in enumerate(net_arch):
@@ -205,6 +223,7 @@ class GnnDdrPolicy(FeedForwardPolicyWithGnn):
 
     def __init__(self, *args, **kwargs):
         super(GnnDdrPolicy, self).__init__(*args, **kwargs,
-                                           net_arch=[dict(pi=[128, 128, 128],
-                                                          vf=[128, 128, 128])],
+                                           # net_arch=[dict(pi=[128, 128, 128],
+                                           #                vf=[128, 128, 128])],
+                                           net_arch=[64, 64, 8],
                                            feature_extraction="gnn")

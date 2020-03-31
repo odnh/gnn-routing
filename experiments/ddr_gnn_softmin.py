@@ -10,14 +10,15 @@ from stable_baselines_ddr.gnn_policy import GnnDdrPolicy
 
 # load/generate graph
 graph = graphs.topologyzoo("TLex", 10000)
+#graph = graphs.basic()
 
 # set env parameters
 rs = np.random.RandomState()
-dm_memory_length = 10
+dm_memory_length = 5
 num_demands = graph.number_of_nodes() * (graph.number_of_nodes() - 1)
 num_edges = graph.number_of_edges()
 dm_generator_getter = lambda: dm.cyclical_sequence(
-    lambda: dm.bimodal_demand(num_demands, rs), 40, 5, 0.0, rs)
+    lambda: dm.bimodal_demand(num_demands, rs), 40, 15, 0.3, rs)
 
 # make env
 env = gym.make('ddr-softmin-v0', dm_generator_getter=dm_generator_getter,
@@ -28,7 +29,7 @@ model = PPO2(GnnDdrPolicy, env, verbose=1,
              policy_kwargs={'network_graph': graph}, tensorboard_log="./gnn_tensorboard/")
 
 # learn
-model.learn(total_timesteps=10000)
+model.learn(total_timesteps=100000)
 
 # use
 obs = env.reset()
