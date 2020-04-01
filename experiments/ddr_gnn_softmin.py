@@ -1,4 +1,5 @@
 import tensorflow as tf
+
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 import gym
@@ -10,15 +11,15 @@ from stable_baselines_ddr.gnn_policy import GnnDdrPolicy
 
 # load/generate graph
 graph = graphs.topologyzoo("TLex", 10000)
-#graph = graphs.basic()
+# graph = graphs.basic()
 
 # set env parameters
 rs = np.random.RandomState()
-dm_memory_length = 5
+dm_memory_length = 10
 num_demands = graph.number_of_nodes() * (graph.number_of_nodes() - 1)
 num_edges = graph.number_of_edges()
 dm_generator_getter = lambda: dm.cyclical_sequence(
-    lambda: dm.bimodal_demand(num_demands, rs), 40, 15, 0.3, rs)
+    lambda: dm.bimodal_demand(num_demands, rs), 40, 5, 0.0, rs)
 
 # make env
 env = gym.make('ddr-softmin-v0', dm_generator_getter=dm_generator_getter,
@@ -26,7 +27,9 @@ env = gym.make('ddr-softmin-v0', dm_generator_getter=dm_generator_getter,
 
 # make model
 model = PPO2(GnnDdrPolicy, env, verbose=1,
-             policy_kwargs={'network_graph': graph}, tensorboard_log="./gnn_tensorboard/")
+             policy_kwargs={'network_graph': graph,
+                            'dm_memory_length': dm_memory_length},
+             tensorboard_log="./gnn_tensorboard/")
 
 # learn
 model.learn(total_timesteps=100000)
@@ -36,4 +39,5 @@ obs = env.reset()
 for i in range(1000):
     action, _states = model.predict(obs)
     obs, rewards, dones, info = env.step(action)
+    print(rewards)
     env.render()

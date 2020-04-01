@@ -1,23 +1,57 @@
 import warnings
-from itertools import zip_longest
 from typing import List
 
 import networkx as nx
 import numpy as np
 import tensorflow as tf
-from graph_nets import utils_tf
+from graph_nets.demos.models import EncodeProcessDecode
+from graph_nets.graphs import GraphsTuple
 from stable_baselines.common.policies import ActorCriticPolicy
 from stable_baselines.common.policies import mlp_extractor
 from stable_baselines.common.policies import nature_cnn
 from stable_baselines.common.tf_layers import linear
 
-from graph_nets.graphs import GraphsTuple
-from graph_nets.demos.models import EncodeProcessDecode
+
+def repeat_inner_dim(input: tf.Tensor, repeats: tf.Tensor) -> tf.Tensor:
+    """
+    Take a 2D tensor eg [[1,2],[3,4]] and repeat the inside n times eg
+    [[1,2],[3,4],[1,2],[3,4],......]
+    Args:
+        input: A 2D tensor
+        repeats: Number of times to repeat (a tf scalar)
+
+    Returns:
+        A tensor with the elements of the inner dimension repeated
+    """
+    minus_one = tf.constant(-1)
+    inner_size = tf.shape(input)[1]
+    reshape_tensor = tf.stack([minus_one, inner_size])
+
+    expanded = tf.expand_dims(input, axis=0)
+    repeated = tf.repeat(expanded, repeats, axis=0)
+    reshaped_inner = tf.reshape(repeated, reshape_tensor)
+    return reshaped_inner
 
 
-# TODO: update to contain a gcn or do whatever else it has to
+def repeat_outer_dim(input: tf.Tensor, repeats: tf.Tensor) -> tf.Tensor:
+    """
+    Take a 1D tensor eg [1,2,3] and repeat its content n times eg
+    [1,2,3,1,2,3,1,2,3.......]
+    Args:
+        input: A 1D tensor
+        repeats: Number of times to repead (a tf scalar)
+
+    Returns:
+        A tensor with the elements repeated
+    """
+    expanded = tf.expand_dims(input, axis=0)
+    repeated = tf.repeat(expanded, repeats, axis=0)
+    reshaped_inner = tf.reshape(repeated, [-1])
+    return reshaped_inner
+
+
 def gnn_extractor(flat_observations: tf.Tensor, net_arch: List,
-                  act_fun: tf.function, network_graph: nx.MultiDiGraph):
+                  act_fun: tf.function, network_graph: nx.MultiDiGraph, dm_memory_length: int):
     """
     TODO: rewrite the whole docstring
     Constructs an MLP that receives observations as an input and outputs a latent representation for the policy and
@@ -44,88 +78,52 @@ def gnn_extractor(flat_observations: tf.Tensor, net_arch: List,
     :return: (tf.Tensor, tf.Tensor) latent_policy, latent_value of the specified network.
         If all layers are shared, then ``latent_policy == latent_value``
     """
+    # TODO: use separate network for value function (maybe mlpness)
     latent = flat_observations
-    # tf.Print(flat_observations)
-    policy_only_layers = []  # Layer sizes of the network that only belongs to the policy network
-    value_only_layers = []  # Layer sizes of the network that only belongs to the value network
 
     sorted_edges = sorted(network_graph.edges())
     num_edges = len(sorted_edges)
     num_nodes = network_graph.number_of_nodes()
+    num_batches = tf.shape(latent)[0]
 
-    ######FEATS FOR GRAPHTUPLE
-    edge_features = tf.constant(np.zeros((num_edges, 1), np.float32),
-                                name="initial_edge_features")
-    node_features = tf.constant(
-        np.zeros((num_nodes, num_nodes - 1), np.float32),
-        name="initial_node_features")  # some transformation from flat_observations
-    global_features = tf.constant(np.zeros((1, 1)), np.float32,
-                                  name="initial_global_features")
-    receiver_nodes = tf.constant(np.array([e[1] for e in sorted_edges]), np.int32,
-        name="receiver_nodes")
-    sender_nodes = tf.constant(np.array([e[0] for e in sorted_edges]), np.int32,
-        name="sender_nodes")
-    n_node_list = tf.constant(np.array([num_nodes]), np.int32, name="n_node_list")
-    n_edge_list = tf.constant(np.array([num_edges]), np.int32, name="n_edge_list")
+    node_features = tf.reshape(latent, [-1, (num_nodes - 1) * dm_memory_length],
+                               name="node_feat_input")
+    edge_features = repeat_inner_dim(
+        tf.constant(np.zeros((num_edges, 1)), np.float32), num_batches)
+    global_features = repeat_inner_dim(
+        tf.constant(np.zeros((1, 1)), np.float32), num_batches)
+    sender_nodes = repeat_outer_dim(
+        tf.constant(np.array([e[0] for e in sorted_edges]), np.int32),
+        num_batches)
+    receiver_nodes = repeat_outer_dim(
+        tf.constant(np.array([e[1] for e in sorted_edges]), np.int32),
+        num_batches)
+    n_node_list = tf.reshape(
+        repeat_inner_dim(tf.constant(np.array([[num_nodes]]), np.int32),
+                         num_batches), [-1])
+    n_edge_list = tf.reshape(
+        repeat_inner_dim(tf.constant(np.array([[num_edges]]), np.int32),
+                         num_batches), [-1])
 
-    input_graph = GraphsTuple(edges=edge_features,
-                              nodes=node_features,
+    input_graph = GraphsTuple(nodes=node_features,
+                              edges=edge_features,
                               globals=global_features,
-                              receivers=receiver_nodes,
                               senders=sender_nodes,
+                              receivers=receiver_nodes,
                               n_node=n_node_list,
                               n_edge=n_edge_list)
 
-
     model = EncodeProcessDecode(edge_output_size=1)
-    output_graph = model(input_graph, 1)
+    output_graphs = model(input_graph, 1)
+    # NB: reshape needs num_edges as otherwise output tensor has too many
+    #     unknown dims
+    output_edges = tf.reshape(output_graphs[0].edges,
+                              tf.constant([-1, num_edges], np.int32))
+    latent_policy_gnn = output_edges
 
-    latent_policy2 = tf.transpose(output_graph[0].edges)
-
-    # Iterate through the shared layers and build the shared parts of the network
-    for idx, layer in enumerate(net_arch):
-        if isinstance(layer, int):  # Check that this is a shared layer
-            layer_size = layer
-            latent = act_fun(
-                linear(latent, "shared_fc{}".format(idx), layer_size,
-                       init_scale=np.sqrt(2)))
-        else:
-            assert isinstance(layer,
-                              dict), "Error: the net_arch list can only contain ints and dicts"
-            if 'pi' in layer:
-                assert isinstance(layer['pi'],
-                                  list), "Error: net_arch[-1]['pi'] must contain a list of integers."
-                policy_only_layers = layer['pi']
-
-            if 'vf' in layer:
-                assert isinstance(layer['vf'],
-                                  list), "Error: net_arch[-1]['vf'] must contain a list of integers."
-                value_only_layers = layer['vf']
-            break  # From here on the network splits up in policy and value network
-
-    # Build the non-shared part of the network
-    latent_policy = latent
-    latent_value = latent
-    for idx, (pi_layer_size, vf_layer_size) in enumerate(
-            zip_longest(policy_only_layers, value_only_layers)):
-        if pi_layer_size is not None:
-            assert isinstance(pi_layer_size,
-                              int), "Error: net_arch[-1]['pi'] must only contain integers."
-            latent_policy = act_fun(
-                linear(latent_policy, "pi_fc{}".format(idx), pi_layer_size,
-                       init_scale=np.sqrt(2)))
-
-        if vf_layer_size is not None:
-            assert isinstance(vf_layer_size,
-                              int), "Error: net_arch[-1]['vf'] must only contain integers."
-            latent_value = act_fun(
-                linear(latent_value, "vf_fc{}".format(idx), vf_layer_size,
-                       init_scale=np.sqrt(2)))
-
-    return latent_policy, latent_value
+    return latent_policy_gnn, latent_policy_gnn
 
 
-# TODO: update to allow to build using a GCN and take a graph/whatever it needs
 class FeedForwardPolicyWithGnn(ActorCriticPolicy):
     """
     Policy object that implements actor critic, using a feed forward neural network.
@@ -150,7 +148,7 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
                  reuse=False, layers=None, net_arch=None,
                  act_fun=tf.tanh, cnn_extractor=nature_cnn,
-                 feature_extraction="cnn", network_graph=None, **kwargs):
+                 feature_extraction="cnn", network_graph=None, dm_memory_length=None, **kwargs):
         super(FeedForwardPolicyWithGnn, self).__init__(sess, ob_space, ac_space,
                                                        n_env,
                                                        n_steps, n_batch,
@@ -181,8 +179,8 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
             elif feature_extraction == "gnn":
                 pi_latent, vf_latent = gnn_extractor(
                     tf.layers.flatten(self.processed_obs), net_arch, act_fun,
-                    network_graph)
-            else:
+                    network_graph, dm_memory_length)
+            else:  # Assume mlp feature extraction
                 pi_latent, vf_latent = mlp_extractor(
                     tf.layers.flatten(self.processed_obs), net_arch, act_fun)
 
@@ -195,7 +193,6 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
         self._setup_init()
 
     def step(self, obs, state=None, mask=None, deterministic=False):
-        # TODO: can maybe modify obs into a graph here? (and the below methods)
         if deterministic:
             action, value, neglogp = self.sess.run(
                 [self.deterministic_action, self.value_flat, self.neglogp],
