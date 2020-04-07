@@ -50,9 +50,64 @@ def repeat_outer_dim(input: tf.Tensor, repeats: tf.Tensor) -> tf.Tensor:
     return reshaped_inner
 
 
-def gnn_extractor(flat_observations: tf.Tensor, net_arch: List,
-                  act_fun: tf.function, network_graph: nx.MultiDiGraph,
-                  dm_memory_length: int):
+def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
+               act_fun: tf.function, shared_graphs: List[GraphsTuple] = None,
+               input_graph: GraphsTuple = None,
+               iterations: int = 10) -> tf.Tensor:
+    """
+    Builds the value function network for
+    Args:
+        vf_arch: arch to use as a string
+        graph: the graph this is being built for
+        latent: the observation input
+        act_fun: activation function
+        shared_graphs: the gnn output from the policy
+        input_graph: GraphTuple before any processing
+        iterations: number of iterations of message passing
+    Returns:
+        A tensor which will hold the value
+    """
+    num_edges = graph.number_of_edges()
+    num_nodes = graph.number_of_nodes()
+
+    if vf_arch == "shared":
+        output_edges_vf = tf.reshape(shared_graphs[-1].edges,
+                                     tf.constant([-1, num_edges], np.int32))
+        output_nodes_vf = tf.reshape(shared_graphs[-1].nodes,
+                                     tf.constant([-1, num_nodes], np.int32))
+        output_globals_vf = tf.reshape(shared_graphs[-1].globals,
+                                       tf.constant([-1, 1], np.int32))
+        latent_vf = act_fun(
+            linear(
+                tf.concat([output_edges_vf, output_nodes_vf, output_globals_vf],
+                          1), "vf_fc0", 128, init_scale=np.sqrt(2)))
+    elif vf_arch == "graph":
+        model_vf = EncodeProcessDecode(edge_output_size=1, node_output_size=1)
+        output_graphs_vf = model_vf(input_graph, iterations)
+        output_edges_vf = tf.reshape(output_graphs_vf[-1].edges,
+                                     tf.constant([-1, num_edges], np.int32))
+        output_nodes_vf = tf.reshape(output_graphs_vf[-1].nodes,
+                                     tf.constant([-1, num_nodes], np.int32))
+        latent_vf = act_fun(
+            linear(tf.concat([output_edges_vf, output_nodes_vf], 1), "vf_fc0",
+                   128, init_scale=np.sqrt(2)))
+    elif vf_arch == "mlp":
+        latent_vf = latent
+        latent_vf = act_fun(
+            linear(latent_vf, "vf_fc0", 128, init_scale=np.sqrt(2)))
+        latent_vf = act_fun(
+            linear(latent_vf, "vf_fc1", 128, init_scale=np.sqrt(2)))
+        latent_vf = act_fun(
+            linear(latent_vf, "vf_fc2", 128, init_scale=np.sqrt(2)))
+    else:
+        raise Exception("No such vf network")
+
+    return latent_vf
+
+
+def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
+                  network_graph: nx.MultiDiGraph, dm_memory_length: int,
+                  iterations: int = 10, vf_arch: str = "mlp"):
     """
     Constructs a graph network from the graph passed in. Then inputs are
     traffic demands, placed on nodes as feature vectors. The output policy
@@ -105,37 +160,25 @@ def gnn_extractor(flat_observations: tf.Tensor, net_arch: List,
                               n_node=n_node_list,
                               n_edge=n_edge_list)
 
-    model = EncodeProcessDecode(edge_output_size=1)
-    output_graphs = model(input_graph, 3)
+    model = EncodeProcessDecode(edge_output_size=1, node_output_size=1,
+                                global_output_size=1)
+    output_graphs = model(input_graph, iterations)
     # NB: reshape needs num_edges as otherwise output tensor has too many
     #     unknown dims
-    output_edges = tf.reshape(output_graphs[2].edges,
+    output_edges = tf.reshape(output_graphs[-1].edges,
                               tf.constant([-1, num_edges], np.int32))
     latent_policy_gnn = output_edges
 
-    # model_vf = EncodeProcessDecode(edge_output_size=1, node_output_size=1)
-    # output_graphs_vf = model_vf(input_graph, 3)
-    # output_edges_vf = tf.reshape(output_graphs_vf[2].edges, tf.constant([-1, num_edges], np.int32))
-    # output_nodes_vf = tf.reshape(output_graphs_vf[2].nodes, tf.constant([-1, num_nodes], np.int32))
-    # latent_value = act_fun(linear(tf.concat([output_edges_vf, output_nodes_vf], 1), "vf_fc500", 8,
-    #                init_scale=np.sqrt(2)))
-
-    latent_vf = latent
-    latent_vf = act_fun(linear(latent_vf, "shared_fc{}".format(0), 128,
-                               init_scale=np.sqrt(2)))
-    latent_vf = act_fun(linear(latent_vf, "shared_fc{}".format(1), 128,
-                               init_scale=np.sqrt(2)))
-    latent_vf = act_fun(linear(latent_vf, "shared_fc{}".format(2), 8,
-                               init_scale=np.sqrt(2)))
-
-    # Next test JUST MLP vf
+    # build value function network
+    latent_vf = vf_builder(vf_arch, network_graph, latent, act_fun,
+                           output_graphs, input_graph, iterations)
 
     return latent_policy_gnn, latent_vf
 
 
-def gnn_iter_extractor(flat_observations: tf.Tensor, net_arch: List,
-                       act_fun: tf.function, network_graph: nx.MultiDiGraph,
-                       dm_memory_length: int):
+def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
+                       network_graph: nx.MultiDiGraph, dm_memory_length: int,
+                       iterations: int = 10, vf_arch: str = "mlp"):
     """
     Constructs a graph network from the graph passed in. Then inputs are
     traffic demands, placed on nodes as feature vectors. The inputs also
@@ -168,7 +211,7 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, net_arch: List,
                                name="node_feat_input")
     # reshape edge features to flat batches but vector in dim 1 per edge
     edge_features = tf.reshape(edge_features_slice, [-1, 2],
-                              name="edge_feat_input")
+                               name="edge_feat_input")
 
     # initialise global input features to zeros (as are unused)
     global_features = repeat_inner_dim(
@@ -199,28 +242,17 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, net_arch: List,
                               n_edge=n_edge_list)
 
     # Our only output is a single global which is the value to set the edge
-    model = EncodeProcessDecode(global_output_size=1)
-    output_graphs = model(input_graph, 10)
-    output_global = tf.reshape(output_graphs[9].globals,
+    # We still output other for use in shard part of value function
+    model = EncodeProcessDecode(edge_output_size=1, node_output_size=1,
+                                global_output_size=1)
+    output_graphs = model(input_graph, iterations)
+    output_global = tf.reshape(output_graphs[-1].globals,
                                tf.constant([-1, 1], np.int32))
     latent_policy_gnn = output_global
 
-    # model_vf = EncodeProcessDecode(edge_output_size=1, node_output_size=1)
-    # output_graphs_vf = model_vf(input_graph, 3)
-    # output_edges_vf = tf.reshape(output_graphs_vf[2].edges, tf.constant([-1, num_edges], np.int32))
-    # output_nodes_vf = tf.reshape(output_graphs_vf[2].nodes, tf.constant([-1, num_nodes], np.int32))
-    # latent_value = act_fun(linear(tf.concat([output_edges_vf, output_nodes_vf], 1), "vf_fc500", 8,
-    #                init_scale=np.sqrt(2)))
-
-    latent_vf = latent
-    latent_vf = act_fun(linear(latent_vf, "shared_fc{}".format(0), 128,
-                               init_scale=np.sqrt(2)))
-    latent_vf = act_fun(linear(latent_vf, "shared_fc{}".format(1), 128,
-                               init_scale=np.sqrt(2)))
-    latent_vf = act_fun(linear(latent_vf, "shared_fc{}".format(2), 8,
-                               init_scale=np.sqrt(2)))
-
-    # Next test JUST MLP vf
+    # build value function network
+    latent_vf = vf_builder(vf_arch, network_graph, latent, act_fun,
+                           output_graphs, input_graph, iterations)
 
     return latent_policy_gnn, latent_vf
 
@@ -250,13 +282,11 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
                  reuse=False, layers=None, net_arch=None,
                  act_fun=tf.tanh, cnn_extractor=nature_cnn,
                  feature_extraction="cnn", network_graph=None,
-                 dm_memory_length=None, **kwargs):
+                 dm_memory_length=None, iterations=10, vf_arch="mlp", **kwargs):
         super(FeedForwardPolicyWithGnn, self).__init__(sess, ob_space, ac_space,
-                                                       n_env,
-                                                       n_steps, n_batch,
-                                                       reuse=reuse,
-                                                       scale=(
-                                                               feature_extraction == "cnn"))
+                                                       n_env, n_steps, n_batch,
+                                                       reuse=reuse, scale=(
+                    feature_extraction == "cnn"))
 
         self._kwargs_check(feature_extraction, kwargs)
 
@@ -280,12 +310,14 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
                                                       **kwargs)
             elif feature_extraction == "gnn":
                 pi_latent, vf_latent = gnn_extractor(
-                    tf.layers.flatten(self.processed_obs), net_arch, act_fun,
-                    network_graph, dm_memory_length)
+                    tf.layers.flatten(self.processed_obs), act_fun,
+                    network_graph, dm_memory_length, iterations=iterations,
+                    vf_arch=vf_arch)
             elif feature_extraction == "gnn_iter":
                 pi_latent, vf_latent = gnn_iter_extractor(
-                    tf.layers.flatten(self.processed_obs), net_arch, act_fun,
-                    network_graph, dm_memory_length)
+                    tf.layers.flatten(self.processed_obs), act_fun,
+                    network_graph, dm_memory_length, iterations=iterations,
+                    vf_arch=vf_arch)
             else:  # Assume mlp feature extraction
                 pi_latent, vf_latent = mlp_extractor(
                     tf.layers.flatten(self.processed_obs), net_arch, act_fun)
@@ -326,9 +358,6 @@ class GnnDdrPolicy(FeedForwardPolicyWithGnn):
 
     def __init__(self, *args, **kwargs):
         super(GnnDdrPolicy, self).__init__(*args, **kwargs,
-                                           # net_arch=[dict(pi=[128, 128, 128],
-                                           #                vf=[128, 128, 128])],
-                                           net_arch=[64, 64, 8],
                                            feature_extraction="gnn")
 
 
@@ -342,7 +371,4 @@ class GnnDdrIterativePolicy(FeedForwardPolicyWithGnn):
 
     def __init__(self, *args, **kwargs):
         super(GnnDdrIterativePolicy, self).__init__(*args, **kwargs,
-                                                    # net_arch=[dict(pi=[128, 128, 128],
-                                                    #                vf=[128, 128, 128])],
-                                                    net_arch=[64, 64, 8],
                                                     feature_extraction="gnn_iter")
