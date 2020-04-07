@@ -71,18 +71,25 @@ def gnn_extractor(flat_observations: tf.Tensor, net_arch: List,
     num_nodes = network_graph.number_of_nodes()
     num_batches = tf.shape(latent)[0]
 
+    # slice the data dimension to split the edge and node features
     node_features = tf.reshape(latent, [-1, (num_nodes - 1) * dm_memory_length],
                                name="node_feat_input")
+
+    # initialise unused input features to all zeros
     edge_features = repeat_inner_dim(
         tf.constant(np.zeros((num_edges, 1)), np.float32), num_batches)
     global_features = repeat_inner_dim(
         tf.constant(np.zeros((1, 1)), np.float32), num_batches)
+
+    # repeat edge information across batches and flattened for graph_nets
     sender_nodes = repeat_outer_dim(
         tf.constant(np.array([e[0] for e in sorted_edges]), np.int32),
         num_batches)
     receiver_nodes = repeat_outer_dim(
         tf.constant(np.array([e[1] for e in sorted_edges]), np.int32),
         num_batches)
+
+    # repeat graph information across batches and flattened for graph_nets
     n_node_list = tf.reshape(
         repeat_inner_dim(tf.constant(np.array([[num_nodes]]), np.int32),
                          num_batches), [-1])
@@ -149,28 +156,33 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, net_arch: List,
     num_nodes = network_graph.number_of_nodes()
     num_batches = tf.shape(latent)[0]
 
-    # TODO: write this bit!!
-    #  check the working on the node_feats length bit
+    # slice the data dimension to split the edge and node features
     node_features_slice = tf.slice(latent, [0, 0], [-1, num_nodes * (
             num_nodes - 1) * dm_memory_length])
     edge_features_slice = tf.slice(latent, [0, num_nodes * (
             num_nodes - 1) * dm_memory_length], [-1, -1])
 
-    # TODO: preprocess to split off the edge features
+    # reshape node features to flat batches but still vector in dim 1 per node
     node_features = tf.reshape(node_features_slice,
                                [-1, (num_nodes - 1) * dm_memory_length],
                                name="node_feat_input")
-    # TODO: add in the edge features from latent
-    edge_features = tf.repeat(edge_features_slice, [-1, num_edges * 2],
+    # reshape edge features to flat batches but vector in dim 1 per edge
+    edge_features = tf.reshape(edge_features_slice, [-1, 2],
                               name="edge_feat_input")
+
+    # initialise global input features to zeros (as are unused)
     global_features = repeat_inner_dim(
         tf.constant(np.zeros((1, 1)), np.float32), num_batches)
+
+    # repeat edge information across batches and flattened for graph_nets
     sender_nodes = repeat_outer_dim(
         tf.constant(np.array([e[0] for e in sorted_edges]), np.int32),
         num_batches)
     receiver_nodes = repeat_outer_dim(
         tf.constant(np.array([e[1] for e in sorted_edges]), np.int32),
         num_batches)
+
+    # repeat graph information across batches and flattened for graph_nets
     n_node_list = tf.reshape(
         repeat_inner_dim(tf.constant(np.array([[num_nodes]]), np.int32),
                          num_batches), [-1])
