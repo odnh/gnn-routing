@@ -56,7 +56,8 @@ def opt(graph: nx.DiGraph, demands: Demand) -> float:
         for j, commodity in enumerate(commodities):
             # Coefficient for jth flow over ith edge is scaled by flow width
             constraint_i.SetCoefficient(flow_variables[j][i],
-                                        commodity[2])
+                                        # cast because or-tools :'(
+                                        float(commodity[2]))
         capacity_constraints.append(constraint_i)
 
     # Conservation on transit nodes
@@ -155,3 +156,19 @@ def calc(graph: nx.DiGraph, demands: Demand, routing: Routing) -> float:
             max_link_utilisation,
             link_utilisation / graph.get_edge_data(*edge)['weight'])
     return max_link_utilisation
+
+
+def racke_routing(graph: nx.DiGraph) -> Routing:
+    """
+    Builds an efficient oblivious routing for the graph using the method
+    presented by Racke
+    Args:
+        graph: graph to produce routing for
+
+    Returns:
+        A routing as an an np array
+    """
+    # TODO: implement
+    return np.zeros(
+        (graph.number_of_nodes() * (graph.number_of_nodes()-1),
+         graph.number_of_edges()))

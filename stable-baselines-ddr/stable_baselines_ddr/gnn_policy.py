@@ -51,34 +51,19 @@ def repeat_outer_dim(input: tf.Tensor, repeats: tf.Tensor) -> tf.Tensor:
 
 
 def gnn_extractor(flat_observations: tf.Tensor, net_arch: List,
-                  act_fun: tf.function, network_graph: nx.MultiDiGraph, dm_memory_length: int):
+                  act_fun: tf.function, network_graph: nx.MultiDiGraph,
+                  dm_memory_length: int):
     """
-    TODO: rewrite the whole docstring
-    Constructs an MLP that receives observations as an input and outputs a latent representation for the policy and
-    a value network. The ``net_arch`` parameter allows to specify the amount and size of the hidden layers and how many
-    of them are shared between the policy network and the value network. It is assumed to be a list with the following
-    structure:
+    Constructs a graph network from the graph passed in. Then inputs are
+    traffic demands, placed on nodes as feature vectors. The output policy
+    tensor is built from the edge outputs (in line with the softmin routing
+    approach). The value function can be switched between mlp and graph net
+    using the net_arch argument.
 
-    1. An arbitrary length (zero allowed) number of integers each specifying the number of units in a shared layer.
-       If the number of ints is zero, there will be no shared layers.
-    2. An optional dict, to specify the following non-shared layers for the value network and the policy network.
-       It is formatted like ``dict(vf=[<value layer sizes>], pi=[<policy layer sizes>])``.
-       If it is missing any of the keys (pi or vf), no non-shared layers (empty list) is assumed.
-
-    For example to construct a network with one shared layer of size 55 followed by two non-shared layers for the value
-    network of size 255 and a single non-shared layer of size 128 for the policy network, the following layers_spec
-    would be used: ``[55, dict(vf=[255, 255], pi=[128])]``. A simple shared network topology with two layers of size 128
-    would be specified as [128, 128].
-
-    :param flat_observations: (tf.Tensor) The observations to base policy and value function on.
-    :param net_arch: ([int or dict]) The specification of the policy and value networks.
-        See above for details on its formatting.
-    :param act_fun: (tf function) The activation function to use for the networks.
-    :param network_graph: (nx.DiGraph) The graph to base the model on.
-    :return: (tf.Tensor, tf.Tensor) latent_policy, latent_value of the specified network.
-        If all layers are shared, then ``latent_policy == latent_value``
+    :return: (tf.Tensor, tf.Tensor) latent_policy, latent_value of the
+    specified network. If all layers are shared, then ``latent_policy ==
+    latent_value``
     """
-    # TODO: use separate network for value function (maybe mlpness)
     latent = flat_observations
 
     sorted_edges = sorted(network_graph.edges())
@@ -114,14 +99,118 @@ def gnn_extractor(flat_observations: tf.Tensor, net_arch: List,
                               n_edge=n_edge_list)
 
     model = EncodeProcessDecode(edge_output_size=1)
-    output_graphs = model(input_graph, 1)
+    output_graphs = model(input_graph, 3)
     # NB: reshape needs num_edges as otherwise output tensor has too many
     #     unknown dims
-    output_edges = tf.reshape(output_graphs[0].edges,
+    output_edges = tf.reshape(output_graphs[2].edges,
                               tf.constant([-1, num_edges], np.int32))
     latent_policy_gnn = output_edges
 
-    return latent_policy_gnn, latent_policy_gnn
+    # model_vf = EncodeProcessDecode(edge_output_size=1, node_output_size=1)
+    # output_graphs_vf = model_vf(input_graph, 3)
+    # output_edges_vf = tf.reshape(output_graphs_vf[2].edges, tf.constant([-1, num_edges], np.int32))
+    # output_nodes_vf = tf.reshape(output_graphs_vf[2].nodes, tf.constant([-1, num_nodes], np.int32))
+    # latent_value = act_fun(linear(tf.concat([output_edges_vf, output_nodes_vf], 1), "vf_fc500", 8,
+    #                init_scale=np.sqrt(2)))
+
+    latent_vf = latent
+    latent_vf = act_fun(linear(latent_vf, "shared_fc{}".format(0), 128,
+                               init_scale=np.sqrt(2)))
+    latent_vf = act_fun(linear(latent_vf, "shared_fc{}".format(1), 128,
+                               init_scale=np.sqrt(2)))
+    latent_vf = act_fun(linear(latent_vf, "shared_fc{}".format(2), 8,
+                               init_scale=np.sqrt(2)))
+
+    # Next test JUST MLP vf
+
+    return latent_policy_gnn, latent_vf
+
+
+def gnn_iter_extractor(flat_observations: tf.Tensor, net_arch: List,
+                       act_fun: tf.function, network_graph: nx.MultiDiGraph,
+                       dm_memory_length: int):
+    """
+    Constructs a graph network from the graph passed in. Then inputs are
+    traffic demands, placed on nodes as feature vectors. The inputs also
+    include flags as to whether and edge has been set and which one should be
+    set this iteration which are placed on the edges. The output policy
+    tensor is built from the edge outputs (in line with the softmin routing
+    approach). The value function can be switched between mlp and graph net
+    using the net_arch argument.
+
+    :return: (tf.Tensor, tf.Tensor) latent_policy, latent_value of the
+    specified network. If all layers are shared, then ``latent_policy ==
+    latent_value``
+    """
+    latent = flat_observations
+
+    sorted_edges = sorted(network_graph.edges())
+    num_edges = len(sorted_edges)
+    num_nodes = network_graph.number_of_nodes()
+    num_batches = tf.shape(latent)[0]
+
+    # TODO: write this bit!!
+    #  check the working on the node_feats length bit
+    node_features_slice = tf.slice(latent, [0, 0], [-1, num_nodes * (
+            num_nodes - 1) * dm_memory_length])
+    edge_features_slice = tf.slice(latent, [0, num_nodes * (
+            num_nodes - 1) * dm_memory_length], [-1, -1])
+
+    # TODO: preprocess to split off the edge features
+    node_features = tf.reshape(node_features_slice,
+                               [-1, (num_nodes - 1) * dm_memory_length],
+                               name="node_feat_input")
+    # TODO: add in the edge features from latent
+    edge_features = tf.repeat(edge_features_slice, [-1, num_edges * 2],
+                              name="edge_feat_input")
+    global_features = repeat_inner_dim(
+        tf.constant(np.zeros((1, 1)), np.float32), num_batches)
+    sender_nodes = repeat_outer_dim(
+        tf.constant(np.array([e[0] for e in sorted_edges]), np.int32),
+        num_batches)
+    receiver_nodes = repeat_outer_dim(
+        tf.constant(np.array([e[1] for e in sorted_edges]), np.int32),
+        num_batches)
+    n_node_list = tf.reshape(
+        repeat_inner_dim(tf.constant(np.array([[num_nodes]]), np.int32),
+                         num_batches), [-1])
+    n_edge_list = tf.reshape(
+        repeat_inner_dim(tf.constant(np.array([[num_edges]]), np.int32),
+                         num_batches), [-1])
+
+    input_graph = GraphsTuple(nodes=node_features,
+                              edges=edge_features,
+                              globals=global_features,
+                              senders=sender_nodes,
+                              receivers=receiver_nodes,
+                              n_node=n_node_list,
+                              n_edge=n_edge_list)
+
+    # Our only output is a single global which is the value to set the edge
+    model = EncodeProcessDecode(global_output_size=1)
+    output_graphs = model(input_graph, 10)
+    output_global = tf.reshape(output_graphs[9].globals,
+                               tf.constant([-1, 1], np.int32))
+    latent_policy_gnn = output_global
+
+    # model_vf = EncodeProcessDecode(edge_output_size=1, node_output_size=1)
+    # output_graphs_vf = model_vf(input_graph, 3)
+    # output_edges_vf = tf.reshape(output_graphs_vf[2].edges, tf.constant([-1, num_edges], np.int32))
+    # output_nodes_vf = tf.reshape(output_graphs_vf[2].nodes, tf.constant([-1, num_nodes], np.int32))
+    # latent_value = act_fun(linear(tf.concat([output_edges_vf, output_nodes_vf], 1), "vf_fc500", 8,
+    #                init_scale=np.sqrt(2)))
+
+    latent_vf = latent
+    latent_vf = act_fun(linear(latent_vf, "shared_fc{}".format(0), 128,
+                               init_scale=np.sqrt(2)))
+    latent_vf = act_fun(linear(latent_vf, "shared_fc{}".format(1), 128,
+                               init_scale=np.sqrt(2)))
+    latent_vf = act_fun(linear(latent_vf, "shared_fc{}".format(2), 8,
+                               init_scale=np.sqrt(2)))
+
+    # Next test JUST MLP vf
+
+    return latent_policy_gnn, latent_vf
 
 
 class FeedForwardPolicyWithGnn(ActorCriticPolicy):
@@ -148,7 +237,8 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
                  reuse=False, layers=None, net_arch=None,
                  act_fun=tf.tanh, cnn_extractor=nature_cnn,
-                 feature_extraction="cnn", network_graph=None, dm_memory_length=None, **kwargs):
+                 feature_extraction="cnn", network_graph=None,
+                 dm_memory_length=None, **kwargs):
         super(FeedForwardPolicyWithGnn, self).__init__(sess, ob_space, ac_space,
                                                        n_env,
                                                        n_steps, n_batch,
@@ -178,6 +268,10 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
                                                       **kwargs)
             elif feature_extraction == "gnn":
                 pi_latent, vf_latent = gnn_extractor(
+                    tf.layers.flatten(self.processed_obs), net_arch, act_fun,
+                    network_graph, dm_memory_length)
+            elif feature_extraction == "gnn_iter":
+                pi_latent, vf_latent = gnn_iter_extractor(
                     tf.layers.flatten(self.processed_obs), net_arch, act_fun,
                     network_graph, dm_memory_length)
             else:  # Assume mlp feature extraction
@@ -224,3 +318,19 @@ class GnnDdrPolicy(FeedForwardPolicyWithGnn):
                                            #                vf=[128, 128, 128])],
                                            net_arch=[64, 64, 8],
                                            feature_extraction="gnn")
+
+
+class GnnDdrIterativePolicy(FeedForwardPolicyWithGnn):
+    """
+    Policy for data driven routing using a GCN. Idea is that inputs are a vector
+    of demands to each destination given to each node. Then outputs are a value
+    at each edge to be used as a "softmin" splitting ratio. This will hopefully
+    give some level of generalisability.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(GnnDdrIterativePolicy, self).__init__(*args, **kwargs,
+                                                    # net_arch=[dict(pi=[128, 128, 128],
+                                                    #                vf=[128, 128, 128])],
+                                                    net_arch=[64, 64, 8],
+                                                    feature_extraction="gnn_iter")

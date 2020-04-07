@@ -12,3 +12,7 @@ register(
         id='ddr-softmin-v0',
         entry_point='gym_ddr.envs:DDREnvSoftmin',
 )
+register(
+        id='ddr-iterative-v0',
+        entry_point='gym_ddr.envs:DDREnvIterative',
+)

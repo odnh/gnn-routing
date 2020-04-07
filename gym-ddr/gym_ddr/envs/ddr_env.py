@@ -1,4 +1,6 @@
+import itertools
 from typing import Tuple, List, Dict, Callable, Generator, Type
+
 import gym
 import networkx as nx
 import numpy as np
@@ -58,6 +60,8 @@ class DDREnv(gym.Env):
                    (graph.number_of_nodes() - 1),),
             dtype=np.float64)
 
+        self.oblivious_routing = max_link_utilisation.racke_routing(graph)
+
     def step(self, action: Type[np.ndarray]) -> Tuple[Observation,
                                                       float,
                                                       bool, Dict[None, None]]:
@@ -84,7 +88,8 @@ class DDREnv(gym.Env):
                 self.dm_memory.pop(0)
             routing = self.get_routing(action)
             reward = self.get_reward(routing)
-        return self.get_observation(), reward, self.done, dict()
+            data_dict = self.get_data_dict()
+        return self.get_observation(), reward, self.done, data_dict
 
     def reset(self) -> Observation:
         self.dm_generator = self.dm_generator_getter()
@@ -105,7 +110,7 @@ class DDREnv(gym.Env):
         routing in base case but also does any necessary unflattening.
         """
         num_edges = self.graph.number_of_edges()
-        num_demands = self.graph.number_of_nodes() *\
+        num_demands = self.graph.number_of_nodes() * \
                       (self.graph.number_of_nodes() - 1)
         return action.reshape((num_demands, num_edges))
 
@@ -123,9 +128,22 @@ class DDREnv(gym.Env):
     def get_observation(self) -> Observation:
         """
         Flattens observation for input to learners
-        Returns: A flat np array of the demand matrix
+        Returns:
+            A flat np array of the demand matrix
         """
         return np.stack(self.dm_memory).ravel()
+
+    def get_data_dict(self) -> Dict:
+        """
+        Gets a data dict to return in the step function. Contains the
+        utilisation under oblivious routing
+        Returns:
+            dict with utilisation under oblivious routing
+        """
+        data_dict = dict()
+        data_dict['oblivious_utilisation'] = max_link_utilisation.calc(
+            self.graph, self.dm_memory[0], self.oblivious_routing)
+        return data_dict
 
 
 class DDREnvDest(DDREnv):
@@ -151,7 +169,7 @@ class DDREnvDest(DDREnv):
         self.action_space = gym.spaces.Box(
             low=-1.0,  # This is ok as we softmax in the env itself
             high=1.0,
-            shape=(sum(self.out_edge_count) * (graph.number_of_nodes()-1),),
+            shape=(sum(self.out_edge_count) * (graph.number_of_nodes() - 1),),
             dtype=np.float64)
 
         # Precompute list of flows for use in routing translation
@@ -283,3 +301,147 @@ class DDREnvSoftmin(DDREnv):
         exponentiated = [np.exp(-self.gamma * i) for i in array]
         total = sum(exponentiated)
         return [np.exp(-self.gamma * i) / total for i in exponentiated]
+
+
+class DDREnvIterative(DDREnvSoftmin):
+    """
+    DDREnv where routing at each edge is performed iteratively to allow for
+    generalisation after learning. i.e. each step is to only get the value for
+    one edge which is selected in the observation at the start of the step.
+    """
+
+    def __init__(self,
+                 dm_generator_getter: Callable[
+                     [],
+                     Generator[Demand, None, None]],
+                 dm_memory_length: int,
+                 graph: nx.DiGraph,
+                 gamma: float = 2):
+        super().__init__(dm_generator_getter, dm_memory_length, graph, gamma)
+
+        # Precompute list of flows for use in routing translation
+        num_nodes = self.graph.number_of_nodes()
+        self.flows = [(i, j) for i in range(num_nodes) for j in range(num_nodes)
+                      if i != j]
+        self.gamma = gamma
+
+        self.action_space = gym.spaces.Box(
+            low=0.0,
+            high=1.0,
+            shape=(1,),
+            # TODO: Although try later with number of lows for non softmin version
+            dtype=np.float64)
+        self.observation_space = gym.spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            # Space contains per edge to set and already set
+            shape=(dm_memory_length * graph.number_of_nodes() *
+                   (graph.number_of_nodes() - 1) +
+                   (2 * graph.number_of_edges()),),
+            dtype=np.float64)
+
+        # Extra state to track partial completeness of single routing selection
+        # steps in one iteration
+        self.iter_length = graph.number_of_edges()
+        # the order to set edges during an iteration
+        self.edge_order = np.arange(graph.number_of_edges())
+        np.random.shuffle(self.edge_order)
+        # index into the iteration / which edge to set
+        self.iter_idx = 0
+        # array of which edges have had their routing set so far
+        self.edge_set = np.zeros(graph.number_of_edges(), dtype=float)
+        # current softmin edge values
+        self.edge_values = np.zeros(graph.number_of_edges(), dtype=float)
+
+    def step(self, action: Type[np.ndarray]) -> Tuple[Observation,
+                                                      float,
+                                                      bool, Dict[None, None]]:
+        """
+        Args:
+          action: a single value assignment for the edge asked to assign in the
+                  observation given from the previous call
+        Returns:
+          history of dms and the other bits and pieces expected (use np.stack
+          on the history for training)
+        """
+        # Check if sequence is exhausted
+        if self.done:
+            return self.get_observation(), 0.0, self.done, dict()
+
+        # add action to the overall routing
+        edge_idx = self.edge_order[(self.iter_idx - 1) % self.iter_length]
+        self.edge_values[edge_idx] = action[0]
+        self.edge_set[edge_idx] = 1
+
+        # TODO: as rewards are generally negative, this is currently a big
+        #  issue. ask Kai advice
+        reward = 0
+
+        # iteration start: update dm and shuffle the edge order
+        #                  also calc prev routing and give reward
+        # TODO: see how it performs without the shuffle
+        if self.iter_idx == 0:
+            routing = self.get_routing(self.edge_values)
+            reward = self.get_reward(routing)
+            self.edge_set = np.zeros(self.graph.number_of_edges(), dtype=float)
+            self.edge_values = np.zeros(self.graph.number_of_edges(),
+                                        dtype=float)
+
+            new_dm = next(self.dm_generator, None)
+            if new_dm is None:
+                self.done = True
+            else:
+                self.dm_memory.append(new_dm)
+                if len(self.dm_memory) > self.dm_memory_length:
+                    self.dm_memory.pop(0)
+            np.random.shuffle(self.edge_order)
+
+        data_dict = self.get_data_dict()
+
+        self.iter_idx = (self.iter_idx + 1) % self.iter_length
+        return self.get_observation(), reward, self.done, data_dict
+
+    def reset(self) -> Observation:
+        self.dm_generator = self.dm_generator_getter()
+        self.dm_memory = [next(self.dm_generator) for _ in
+                          range(self.dm_memory_length)]
+        self.done = False
+
+        # iteration variables
+        self.iter_length = self.graph.number_of_edges()
+        self.edge_order = np.arange(self.graph.number_of_edges())
+        np.random.shuffle(self.edge_order)
+        self.iter_idx = 0
+        self.edge_set = np.zeros(self.graph.number_of_edges(), dtype=float)
+        self.edge_values = np.zeros(self.graph.number_of_edges(), dtype=float)
+        return self.get_observation()
+
+    def get_observation(self) -> Observation:
+        """
+        Flattens observation for input to learners
+        Returns:
+            A flat np array of the demand matrix
+        """
+        target_edge_idx = self.edge_order[self.iter_idx]
+        target_edge = np.identity(self.graph.number_of_edges())[
+                      target_edge_idx:target_edge_idx + 1]
+
+        iter_info = np.empty((self.graph.number_of_edges() * 2,), dtype=float)
+        iter_info[0::2] = self.edge_set
+        iter_info[1::2] = target_edge
+        return np.concatenate((np.stack(self.dm_memory).ravel(), iter_info))
+
+    def get_data_dict(self) -> Dict:
+        """
+        Gets a data dict to return in the step function. Contains the
+        utilisation under oblivious routing
+        Returns:
+            dict with utilisation under oblivious routing
+        """
+        target_edge_idx = self.edge_order[self.iter_idx]
+        target_edge = np.identity(self.graph.number_of_edges())[
+                      target_edge_idx:target_edge_idx + 1]
+        data_dict = {'oblivious_utilisation': max_link_utilisation.calc(
+            self.graph, self.dm_memory[0], self.oblivious_routing),
+            'iter_idx': self.iter_idx, 'target_edge': target_edge, 'edge_set': self.edge_set, 'values': self.edge_values}
+        return data_dict
