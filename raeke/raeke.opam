@@ -1,0 +1,10 @@
+opam-version: "2.0"
+version: "0.0.1"
+maintainer: "Oliver Hope"
+authors: "Oliver Hope"
+homepage: "www.cl.cam.ac.uk/~oh260"
+
+depends: [
+  "yates"
+  "dune"
+]

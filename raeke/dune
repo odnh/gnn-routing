@@ -1,0 +1,6 @@
+(executables
+ (names raeke)
+ (public_names raeke_route)
+ (libraries core async frenetic yates.routing yates.types yates.utils
+   yates.solvers)
+ (flags :standard -safe-string))
