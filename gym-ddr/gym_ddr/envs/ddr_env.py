@@ -1,4 +1,3 @@
-import itertools
 from typing import Tuple, List, Dict, Callable, Generator, Type
 
 import gym
@@ -8,10 +7,10 @@ from scipy.special import softmax
 
 from . import max_link_utilisation
 
-Routing = Type[np.ndarray]
-Demand = Type[np.ndarray]
-Observation = Type[np.ndarray]
-Action = Type[np.ndarray]
+Routing = np.ndarray
+Demand = np.ndarray
+Observation = np.ndarray
+Action = np.ndarray
 
 
 class DDREnv(gym.Env):
@@ -32,13 +31,15 @@ class DDREnv(gym.Env):
                      [],
                      Generator[Demand, None, None]],
                  dm_memory_length: int,
-                 graph: nx.DiGraph):
+                 graph: nx.DiGraph,
+                 oblivious_routing: np.ndarray = None):
         """
         Args:
           dm_generator_getter: a function that returns a generator for demand
                                matrices (so can reset)
           dm_memory_length: the length of the dm history we should train on
           graph: the graph we will be routing over
+          oblivious_routing: an oblivious routing
         """
         self.dm_generator_getter = dm_generator_getter
         self.dm_generator = dm_generator_getter()
@@ -60,11 +61,14 @@ class DDREnv(gym.Env):
                    (graph.number_of_nodes() - 1),),
             dtype=np.float64)
 
-        self.oblivious_routing = max_link_utilisation.racke_routing(graph)
+        self.oblivious_routing = oblivious_routing
 
-    def step(self, action: Type[np.ndarray]) -> Tuple[Observation,
-                                                      float,
-                                                      bool, Dict[None, None]]:
+        self.opt_utilisation = 0.0
+        self.utilisation = 0.0
+
+    def step(self, action: np.ndarray) -> Tuple[Observation,
+                                                float,
+                                                bool, Dict[None, None]]:
         """
         Args:
           action: a routing this is a fully specified routing (must be 1D
@@ -119,11 +123,11 @@ class DDREnv(gym.Env):
         Reward calculated as utilisation of graph given routing compared to
         optimal. May have to call external libraries to calculate efficiently.
         """
-        utilisation = max_link_utilisation.calc(self.graph, self.dm_memory[0],
+        self.utilisation = max_link_utilisation.calc(self.graph, self.dm_memory[0],
                                                 routing)
-        opt_utilisation = max_link_utilisation.opt(self.graph,
+        self.opt_utilisation = max_link_utilisation.opt(self.graph,
                                                    self.dm_memory[0])
-        return -(utilisation / opt_utilisation)
+        return -(self.utilisation / self.opt_utilisation)
 
     def get_observation(self) -> Observation:
         """
@@ -138,11 +142,15 @@ class DDREnv(gym.Env):
         Gets a data dict to return in the step function. Contains the
         utilisation under oblivious routing
         Returns:
-            dict with utilisation under oblivious routing
+            dict with utilisation under oblivious routing, optimal and action
         """
-        data_dict = dict()
-        data_dict['oblivious_utilisation'] = max_link_utilisation.calc(
-            self.graph, self.dm_memory[0], self.oblivious_routing)
+        data_dict = {
+            'utilisation': self.utilisation,
+            'opt_utilisation': self.opt_utilisation
+        }
+        if self.oblivious_routing is not None:
+            data_dict['oblivious_utilisation'] = max_link_utilisation.calc(
+                self.graph, self.dm_memory[0], self.oblivious_routing)
         return data_dict
 
 
@@ -158,8 +166,8 @@ class DDREnvDest(DDREnv):
                      [],
                      Generator[Demand, None, None]],
                  dm_memory_length: int,
-                 graph: nx.DiGraph):
-        super().__init__(dm_generator_getter, dm_memory_length, graph)
+                 graph: nx.DiGraph, **kwargs):
+        super().__init__(dm_generator_getter, dm_memory_length, graph, **kwargs)
 
         # For calculating the action space size and routing translation
         # sorted to match encoding ordering of nodes
@@ -240,8 +248,8 @@ class DDREnvSoftmin(DDREnv):
                      Generator[Demand, None, None]],
                  dm_memory_length: int,
                  graph: nx.DiGraph,
-                 gamma: float = 2):
-        super().__init__(dm_generator_getter, dm_memory_length, graph)
+                 gamma: float = 2, **kwargs):
+        super().__init__(dm_generator_getter, dm_memory_length, graph, **kwargs)
 
         # Precompute list of flows for use in routing translation
         num_nodes = self.graph.number_of_nodes()
@@ -250,16 +258,16 @@ class DDREnvSoftmin(DDREnv):
         self.gamma = gamma
 
         self.action_space = gym.spaces.Box(
-            low=-1.0,
-            high=1.0,
+            low=-np.inf,
+            high=np.inf,
             shape=(graph.number_of_edges(),),
             dtype=np.float64)
 
         # Indices of the edges for lookup in routing translation
         # Takes each edge of graph to an index under its source node
         self.edge_index = {}
+        count = 0
         for node in range(graph.number_of_nodes()):
-            count = 0
             for edge in sorted(graph.out_edges(node)):
                 self.edge_index[edge] = count
                 count += 1
@@ -287,7 +295,9 @@ class DDREnvSoftmin(DDREnv):
         for i, flow in enumerate(self.flows):
             for j, edge in enumerate(sorted(self.graph.edges())):
                 full_routing[i][j] = softmin_edge_weights[j]  # Surely wrong?
-
+        # with np.printoptions(threshold=np.inf):
+        #     print(action)
+        #     print(full_routing)
         return full_routing
 
     def softmin(self, array: List[float]) -> List[float]:
@@ -300,7 +310,7 @@ class DDREnvSoftmin(DDREnv):
         """
         exponentiated = [np.exp(-self.gamma * i) for i in array]
         total = sum(exponentiated)
-        return [np.exp(-self.gamma * i) / total for i in exponentiated]
+        return [i / total for i in exponentiated]
 
 
 class DDREnvIterative(DDREnvSoftmin):
@@ -309,6 +319,7 @@ class DDREnvIterative(DDREnvSoftmin):
     generalisation after learning. i.e. each step is to only get the value for
     one edge which is selected in the observation at the start of the step.
     """
+    # TODO: try non-softmin version too (i.e. dest-based)
 
     def __init__(self,
                  dm_generator_getter: Callable[
@@ -316,20 +327,16 @@ class DDREnvIterative(DDREnvSoftmin):
                      Generator[Demand, None, None]],
                  dm_memory_length: int,
                  graph: nx.DiGraph,
-                 gamma: float = 2):
-        super().__init__(dm_generator_getter, dm_memory_length, graph, gamma)
+                 **kwargs):
+        super().__init__(dm_generator_getter, dm_memory_length, graph, **kwargs)
 
         # Precompute list of flows for use in routing translation
         num_nodes = self.graph.number_of_nodes()
-        self.flows = [(i, j) for i in range(num_nodes) for j in range(num_nodes)
-                      if i != j]
-        self.gamma = gamma
 
         self.action_space = gym.spaces.Box(
-            low=0.0,
-            high=1.0,
+            low=-np.inf,
+            high=np.inf,
             shape=(1,),
-            # TODO: Although try later with number of lows for non softmin version
             dtype=np.float64)
         self.observation_space = gym.spaces.Box(
             low=-np.inf,
@@ -373,19 +380,17 @@ class DDREnvIterative(DDREnvSoftmin):
         self.edge_values[edge_idx] = action[0]
         self.edge_set[edge_idx] = 1
 
-        # TODO: as rewards are generally negative, this is currently a big
-        #  issue. ask Kai advice
-        reward = 0
+        routing = self.get_routing(self.edge_values)
+        reward = self.get_reward(routing)
 
         # iteration start: update dm and shuffle the edge order
         #                  also calc prev routing and give reward
         # TODO: see how it performs without the shuffle
         if self.iter_idx == 0:
-            routing = self.get_routing(self.edge_values)
-            reward = self.get_reward(routing)
             self.edge_set = np.zeros(self.graph.number_of_edges(), dtype=float)
-            self.edge_values = np.zeros(self.graph.number_of_edges(),
-                                        dtype=float)
+            # TODO: try with and without zeroing this
+            # self.edge_values = np.zeros(self.graph.number_of_edges(),
+            #                             dtype=float)
 
             new_dm = next(self.dm_generator, None)
             if new_dm is None:
@@ -433,15 +438,16 @@ class DDREnvIterative(DDREnvSoftmin):
 
     def get_data_dict(self) -> Dict:
         """
-        Gets a data dict to return in the step function. Contains the
-        utilisation under oblivious routing
+        Gets a data dict to return in the step function.
         Returns:
-            dict with utilisation under oblivious routing
+            dict with oblivious routing from parent and information about
+            iteration state
         """
         target_edge_idx = self.edge_order[self.iter_idx]
         target_edge = np.identity(self.graph.number_of_edges())[
                       target_edge_idx:target_edge_idx + 1]
-        data_dict = {'oblivious_utilisation': max_link_utilisation.calc(
-            self.graph, self.dm_memory[0], self.oblivious_routing),
-            'iter_idx': self.iter_idx, 'target_edge': target_edge, 'edge_set': self.edge_set, 'values': self.edge_values}
+        data_dict = super().get_data_dict()
+        data_dict.update({'iter_idx': self.iter_idx, 'target_edge': target_edge,
+                          'edge_set': self.edge_set,
+                          'values': self.edge_values})
         return data_dict

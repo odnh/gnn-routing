@@ -1,11 +1,11 @@
-from typing import Type
+from typing import Tuple
 
-import numpy as np
 import networkx as nx
+import numpy as np
 from ortools.linear_solver import pywraplp
 
-Demand = Type[np.ndarray]
-Routing = Type[np.ndarray]
+Demand = np.ndarray
+Routing = np.ndarray
 
 
 def opt(graph: nx.DiGraph, demands: Demand) -> float:
@@ -99,9 +99,11 @@ def opt(graph: nx.DiGraph, demands: Demand) -> float:
         constraint_i = solver.Constraint(1, 1, '(4,{})'.format(i))
         for edge_dest in list(sorted(graph.adj[commodity[1]].keys())):
             constraint_i.SetCoefficient(
-                flow_variables[i][edge_index_dict[(edge_dest, commodity[1])]], 1)
+                flow_variables[i][edge_index_dict[(edge_dest, commodity[1])]],
+                1)
             constraint_i.SetCoefficient(
-                flow_variables[i][edge_index_dict[(commodity[1], edge_dest)]], -1)
+                flow_variables[i][edge_index_dict[(commodity[1], edge_dest)]],
+                -1)
         conservation_dest_constraints.append(constraint_i)
 
     ## OBJECTIVES
@@ -130,6 +132,101 @@ def opt(graph: nx.DiGraph, demands: Demand) -> float:
 
     return objective.Value()
 
+"""
+Algorithm Planning
+end result: array of bandwidth used on each edge
+high-level: calculate such an array for every flow and sum them
+per-flow:
+  1. initialise entire demand at start node
+  2. push bandwidth onto edges and neighbour nodes (delete from self)
+  3. perform 2 for all nodes what were changed in prev step
+  3.1 NB: if dst node, then just absorb the flow rather than push on
+  4. end when no node changes value (may need some min float limit)
+"""
+
+
+def calc_per_flow_link_utilisation(graph: nx.DiGraph, flow: Tuple[int, int],
+                                   demand: float,
+                                   routing: np.ndarray) -> np.ndarray:
+    """
+    Calculates the link utilisation over a graph for a particular flow and its
+    demand. (NB utilisation in bandwidth, not relative to capacity)
+    Args:
+        graph: network graph to calculate over
+        flow: the source and destination node ids of the flow
+        demand: the bandwidth to push from source to sink
+        routing: edge splitting ratios to be used when routing
+    Returns:
+        Link utilisation as an ndarray (one value per edge)
+    """
+    # TODO: make this code run much faster
+    num_edges = graph.number_of_edges()
+    num_nodes = graph.number_of_nodes()
+    edge_mapping = {edge: i for i, edge in enumerate(sorted(graph.edges))}
+
+    link_utilisation = np.zeros(num_edges)
+    node_flow = np.zeros(num_nodes)  # the flow stored at a node
+    node_flow[flow[0]] = demand
+
+    to_explore = [flow[0]]
+    while to_explore:
+        current_node = to_explore.pop(0)
+        current_flow = node_flow[current_node]
+
+        # nothing to do here then so don't even try
+        if np.isclose(current_flow, 0.0):  # TODO: fix this to be better
+            continue
+
+        # this is the flow destination node so we absorb all flow
+        if current_node == flow[1]:
+            node_flow[current_node] = 0.0
+            continue
+
+        # push the flow at this node over all edges
+        for edge in graph.out_edges(current_node):
+            edge_index = edge_mapping[edge]
+            ratio = routing[edge_index]
+            node_flow[edge[1]] += ratio * current_flow
+            # all important step, update our output
+            link_utilisation[edge_index] += ratio * current_flow
+            # have updated the dst so need to add it to the list of things to do
+            to_explore.append(edge[1])
+        # we've moved all the flow from this node now, so reset back to zero
+        node_flow[current_node] = 0.0
+
+    return link_utilisation
+
+
+def calc_overall_link_utilisation(graph: nx.DiGraph, demands: Demand,
+                                  routing: Routing) -> np.ndarray:
+    """
+    Calculates the overall utilisation of each link in a network given a routing
+    choice and a set of demands. (NB utilisation in bandwidth, not relative to
+    capacity)
+    Args:
+        graph: network graph to calculate over
+        demands: demands matrix, format is: 1 x (|V|*(|V|-1)) (ordering is
+                 (0,1),(0,2),...,(1,0),(1,2),... etc)
+        routing: per-flow edge splitting rations, format is (|V|*(|V|-1)) x |E|
+                 (same ordering as flows, edges numerically ordered)
+    Returns:
+        Link utilisation as an ndarray (one value per edge)
+    """
+    num_edges = graph.number_of_edges()
+    num_nodes = graph.number_of_nodes()
+    flows = [(i, j) for i in range(num_nodes) for j in range(num_nodes) if
+             i != j]
+
+    link_utilisation = np.zeros(num_edges)
+
+    for i, flow in enumerate(flows):
+        flow_link_utilisation = calc_per_flow_link_utilisation(graph, flow,
+                                                               demands[i],
+                                                               routing[i])
+        link_utilisation += flow_link_utilisation
+
+    return link_utilisation
+
 
 def calc(graph: nx.DiGraph, demands: Demand, routing: Routing) -> float:
     """
@@ -144,31 +241,10 @@ def calc(graph: nx.DiGraph, demands: Demand, routing: Routing) -> float:
 
     NB: does not actually check given routing is valid but assumes it is.
     """
-    max_link_utilisation = 0.0
-    edges = sorted(graph.edges())
+    edge_capacities = [e[2]['weight'] for e in sorted(graph.edges(data=True))]
+    link_utilisation = calc_overall_link_utilisation(graph, demands, routing)
+    # Because utilisation compared to link width is what we care about here
+    ratio_capacities = np.divide(link_utilisation, edge_capacities)
 
-    for i, edge in enumerate(edges):
-        link_utilisation = 0.0
-        # This loops over each flow
-        for j in range(routing.shape[0]):
-            link_utilisation += (routing[j][i] * demands[j])
-        max_link_utilisation = max(
-            max_link_utilisation,
-            link_utilisation / graph.get_edge_data(*edge)['weight'])
-    return max_link_utilisation
+    return np.max(ratio_capacities)
 
-
-def racke_routing(graph: nx.DiGraph) -> Routing:
-    """
-    Builds an efficient oblivious routing for the graph using the method
-    presented by Racke
-    Args:
-        graph: graph to produce routing for
-
-    Returns:
-        A routing as an an np array
-    """
-    # TODO: implement
-    return np.zeros(
-        (graph.number_of_nodes() * (graph.number_of_nodes()-1),
-         graph.number_of_edges()))

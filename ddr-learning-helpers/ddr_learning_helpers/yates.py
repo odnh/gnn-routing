@@ -33,6 +33,19 @@ def nx_to_yates_dot(graph: nx.DiGraph, path: str):
     nx.drawing.nx_pydot.write_dot(g, path)
 
 
+def scale_per_node(routing: np.ndarray, graph: nx.DiGraph) -> np.ndarray:
+    """
+    Takes a routing an then normalises the values for the out edges from each
+    node
+    Args:
+        routing: a routing
+        graph: the graph for edge data
+    Returns:
+        a normalised routing
+    """
+    # TODO: implement
+
+
 def get_ddr_routing(raw_routing: str, graph: nx.DiGraph) -> np.ndarray:
     """
     Reads the raw output from the routing given by Yates and puts it into the
@@ -59,24 +72,23 @@ def get_ddr_routing(raw_routing: str, graph: nx.DiGraph) -> np.ndarray:
     match_flow_line = re.compile('->')
     match_edges_line = re.compile('@')
     match_src_dst = re.compile(r'\d+')
-    match_edges = re.compile(r'\d+(?=,|\))')
+    match_edges = re.compile(r'\(s\d+,s\d+\)')
+    match_edge_ends = re.compile(r'\d+')
     match_value = re.compile(r'\d.\d+')
 
     lines = raw_routing.split("\n")
-
     for line in lines:
         if match_flow_line.search(line) is not None:
             src_dst = match_src_dst.findall(line)
             current_flow = (int(src_dst[0]), int(src_dst[1]))
         elif match_edges_line.search(line) is not None:
             edges = match_edges.findall(line)
+            edge_ends = [match_edge_ends.findall(edge) for edge in edges]
             value = match_value.findall(line)
-            for i in range(0, len(edges), 2):
-                # set routing
-                edge = (int(edges[i]), int(edges[i + 1]))
-                if edge[0] == edge[1]: continue
-                routing[flow_map[current_flow]][edge_map[edge]] = float(
-                    value[0])
+            for edge_str in edge_ends:
+                edge = (int(edge_str[0]), int(edge_str[1]))
+                if edge[0] != edge[1]:
+                    routing[flow_map[current_flow]][edge_map[edge]] += float(value[0])
 
     return routing
 
@@ -100,6 +112,7 @@ def get_oblivious_routing(graph: nx.DiGraph) -> Routing:
     raw_routing = subprocess.run([raeke_path, oblivious_tmp_path],
                                  stdout=subprocess.PIPE).stdout.decode('utf-8')
     ddr_routing = get_ddr_routing(raw_routing, graph)
+    normalised_routing = scale_per_node(ddr_routing, graph)
     os.remove(oblivious_tmp_path)
 
-    return ddr_routing
+    return normalised_routing
