@@ -107,7 +107,7 @@ def opt(graph: nx.DiGraph, demands: Demand) -> float:
         conservation_dest_constraints.append(constraint_i)
 
     ## OBJECTIVES
-    # Implementation of the load-balancing example from wikipedia
+    # Implementation of the load-balancing example from Wikipedia
     # First we add more constraints so that we are minimising the maximum
     max_utilisation_variable = solver.NumVar(0, solver.Infinity(),
                                              'max_link_utilisation')
@@ -130,19 +130,14 @@ def opt(graph: nx.DiGraph, demands: Demand) -> float:
     objective.SetMinimization()
     solver.Solve()
 
-    return objective.Value()
+    # # extract the actual routing. Useful for debugging, maybe use to bootstrap
+    # opt_routing = np.zeros((len(commodities), graph.number_of_edges()))
+    # for i in range(len(commodities)):
+    #     for j in range(graph.number_of_edges()):
+    #         opt_routing[i][j] =flow_variables[i][j].solution_value()
+    # print(opt_routing)
 
-"""
-Algorithm Planning
-end result: array of bandwidth used on each edge
-high-level: calculate such an array for every flow and sum them
-per-flow:
-  1. initialise entire demand at start node
-  2. push bandwidth onto edges and neighbour nodes (delete from self)
-  3. perform 2 for all nodes what were changed in prev step
-  3.1 NB: if dst node, then just absorb the flow rather than push on
-  4. end when no node changes value (may need some min float limit)
-"""
+    return objective.Value()
 
 
 def calc_per_flow_link_utilisation(graph: nx.DiGraph, flow: Tuple[int, int],
