@@ -5,7 +5,7 @@ import networkx as nx
 import numpy as np
 from scipy.special import softmax
 
-from . import max_link_utilisation
+from .max_link_utilisation import MaxLinkUtilisation
 
 Routing = np.ndarray
 Demand = np.ndarray
@@ -63,6 +63,7 @@ class DDREnv(gym.Env):
 
         self.oblivious_routing = oblivious_routing
 
+        self.mlu = MaxLinkUtilisation(graph)
         self.opt_utilisation = 0.0
         self.utilisation = 0.0
 
@@ -123,11 +124,8 @@ class DDREnv(gym.Env):
         Reward calculated as utilisation of graph given routing compared to
         optimal. May have to call external libraries to calculate efficiently.
         """
-        self.utilisation = max_link_utilisation.calc(self.graph,
-                                                     self.dm_memory[0],
-                                                     routing)
-        self.opt_utilisation = max_link_utilisation.opt(self.graph,
-                                                        self.dm_memory[0])
+        self.utilisation = self.mlu.calc(self.dm_memory[0], routing)
+        self.opt_utilisation = self.mlu.opt(self.dm_memory[0])
         return -(self.utilisation / self.opt_utilisation)
 
     def get_observation(self) -> Observation:
@@ -150,8 +148,8 @@ class DDREnv(gym.Env):
             'opt_utilisation': self.opt_utilisation
         }
         if self.oblivious_routing is not None:
-            data_dict['oblivious_utilisation'] = max_link_utilisation.calc(
-                self.graph, self.dm_memory[0], self.oblivious_routing)
+            data_dict['oblivious_utilisation'] = self.mlu.calc(
+                self.dm_memory[0], self.oblivious_routing)
         return data_dict
 
 
