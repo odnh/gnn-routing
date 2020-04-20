@@ -1,3 +1,4 @@
+from functools import reduce
 from typing import Tuple
 
 import networkx as nx
@@ -15,10 +16,11 @@ class MaxLinkUtilisation:
     utilisation gfiv
     """
 
-    def __init__(self, graph: nx.DiGraph):
+    def __init__(self, graph: nx.DiGraph, epsilon: float = 1.e-6):
         self.graph = graph
         self.num_nodes = graph.number_of_nodes()
         self.num_edges = graph.number_of_edges()
+        self.epsilon = epsilon
 
         # Build helper data
         self.edges = list(sorted(graph.edges(data=True)))
@@ -26,6 +28,69 @@ class MaxLinkUtilisation:
                                 enumerate(self.edges)}
         self.commodities = [(i, j) for i in range(self.num_nodes) for j in
                             range(self.num_nodes) if i != j]
+        # ones so no div by zero
+        self.edge_capacities = np.zeros((self.num_nodes, self.num_nodes),
+                                        dtype=float)
+        for edge in self.edges:
+            self.edge_capacities[edge[0]][edge[1]] = edge[2]['weight']
+
+        # to see if the previous change was small enough to end calculation
+        self.min_delta = np.full((self.num_nodes, self.num_nodes), self.epsilon, dtype=float)
+
+    def calc_demand(self, routing: np.ndarray, demand: float,
+                    commodity_idx: int) -> np.ndarray:
+        """
+        Calculates the demand along each edge for a particular routing and flow
+        NB: not scaled by capacity so not "utilisation"
+        Args:
+            routing: per edge flow-splitting ratios |E|
+            demand: the demand to be pushed from source to sink
+            commodity_idx: index of the commodity (i.e. src, dst pair)
+
+        Returns:
+            ndarray of volume of flow on each edge
+        """
+        commodity = self.commodities[commodity_idx]
+        node_flow = np.zeros(self.num_nodes)
+        node_flow[commodity[0]] = demand
+
+        split_matrix = np.zeros((self.num_nodes, self.num_nodes), dtype=float)
+        for edge_idx, edge in enumerate(self.edges):
+            split_matrix[edge[1]][edge[0]] = routing[commodity_idx][edge_idx]
+        split_matrix[:, commodity[1]] = 0  # no send from the destination node
+
+        edge_utilisation = np.zeros((self.num_nodes, self.num_nodes))
+
+        while True:
+            change = np.multiply(split_matrix, node_flow)
+            edge_utilisation += change
+            node_flow = np.matmul(split_matrix, node_flow)
+            comparison = np.less(change, self.min_delta)
+            if np.logical_and.reduce(np.logical_and.reduce(comparison)):
+                break
+
+        return edge_utilisation
+
+    def calc(self, demands: Demand, routing: Routing) -> np.ndarray:
+        """
+        Returns the max-link-utilisation for the graph, given the demands and
+        routing. Uses np matrix operations for speed
+        Args:
+          demands: demand matrix, should be 1 x (|V|*(|V|-1)) in number of nodes
+          routing: per-flow edge-splitting ratios (|V|*(|V|-1)) x |E|
+        Returns:
+          max-link-utilisation
+        """
+        total_utilisation = np.zeros((self.num_nodes, self.num_nodes),
+                                     dtype=float)
+
+        for commodity_idx in range(len(self.commodities)):
+            utilisation = self.calc_demand(routing,
+                                                  demands[commodity_idx],
+                                                  commodity_idx)
+            total_utilisation += utilisation
+
+        return np.nanmax(np.divide(total_utilisation, self.edge_capacities))
 
     def opt(self, demands: Demand) -> float:
         """
@@ -142,13 +207,6 @@ class MaxLinkUtilisation:
         objective.SetMinimization()
         solver.Solve()
 
-        # # extract the actual routing. Useful for debugging, maybe use to bootstrap
-        # opt_routing = np.zeros((len(commodities), self.num_edges))
-        # for i in range(len(commodities)):
-        #     for j in range(self.num_edges):
-        #         opt_routing[i][j] = flow_variables[i][j].solution_value()
-        # print(opt_routing)
-
         return objective.Value()
 
     def calc_per_flow_link_utilisation(self, flow: Tuple[int, int],
@@ -229,7 +287,7 @@ class MaxLinkUtilisation:
 
         return link_utilisation
 
-    def slow_calc(self, demands: Demand, routing: Routing) -> float:
+    def calc_slow(self, demands: Demand, routing: Routing) -> float:
         """
         Returns the max-link-utilisation for the graph, given
         the demands and routing
@@ -247,7 +305,7 @@ class MaxLinkUtilisation:
 
         return np.max(ratio_capacities)
 
-    def calc(self, demands: Demand, routing: Routing) -> float:
+    def calc_lp(self, demands: Demand, routing: Routing) -> float:
         """
         Returns the max-link-utilisation for the graph, given
         the demands and routing
@@ -259,7 +317,7 @@ class MaxLinkUtilisation:
         Returns:
           max-link-utilisation
         """
-        epsilon = 1.e-2  # TODO: work out how to make this more stable (objective maybe)
+        epsilon = self.epsilon  # TODO: work out how to make this more stable (objective maybe)
 
         # Create the linear solver with the GLOP backend.
         solver = pywraplp.Solver('flow_utilisation_lp',
@@ -406,48 +464,24 @@ class MaxLinkUtilisation:
                 constraints_flow_i.append(constraint_edge)
             source_splitting_constraints.append(constraints_flow_i)
 
-        # ## OBJECTIVES TODO: this is currently in progress (but not at all done)
-        # # Make the splitting ratios an objective to help with returning at least
-        # # some solution. Also can add how much we've missed by to the reward
-        # # First we add more constraints so that we are minimising the maximum
-        # max_utilisation_variable = solver.NumVar(0, solver.Infinity(),
-        #                                          'max_link_utilisation')
-        # min_of_max_constraints = []
-        # for i, edge in enumerate(self.edges):
-        #     # Constraint that '-inf < f_0 + f_1 +... - max < 0'
-        #     # i.e 'f_0 + f_1 + ... < max'
-        #     constraint_i = solver.Constraint(-solver.Infinity(), 0,
-        #                                      '(5,{})'.format(i))
-        #     constraint_i.SetCoefficient(max_utilisation_variable, -1)
-        #     for j, flow_variable in enumerate(flow_variables):
-        #         constraint_i.SetCoefficient(flow_variable[i],
-        #                                     demands[j] /
-        #                                     self.graph.get_edge_data(*edge)[
-        #                                         'weight'])
-        #     min_of_max_constraints.append(constraint_i)
-        #
-        # # Objective now is to minimise the maximum link utilisation
-        # objective = solver.Objective()
-        # objective.SetCoefficient(max_utilisation_variable, 1)
-        # objective.SetMinimization()
         solver.Solve()
 
         result_status = solver.Solve()
 
-        # extract the actual routing. Useful for debugging, maybe use to bootstrap
         utilisation = np.zeros(
             (len(self.commodities), self.graph.number_of_edges()))
-        assignment = np.zeros(
-            (len(self.commodities), self.graph.number_of_edges()))
+        # # extract the actual routing. Useful for debugging, maybe use to bootstrap
+        # assignment = np.zeros(
+        #     (len(self.commodities), self.graph.number_of_edges()))
 
         # if routing is really that bad, just bail and give a sad result
-        if result_status == solver.NOT_SOLVED or  result_status == solver.INFEASIBLE:
+        if result_status == solver.NOT_SOLVED or result_status == solver.INFEASIBLE:
             return 1.0
 
         for i in range(len(self.commodities)):
             for j in range(self.graph.number_of_edges()):
                 utilisation[i][j] = flow_variables[i][j].solution_value() / \
                                     self.edges[j][2]['weight']
-                assignment[i][j] = flow_variables[i][j].solution_value()
+                # assignment[i][j] = flow_variables[i][j].solution_value()
 
         return np.max(np.sum(utilisation, axis=0))

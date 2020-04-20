@@ -321,8 +321,6 @@ class DDREnvSoftmin(DDREnv):
         Returns:
             np array the same size but softminned
         """
-        # TODO: make all numpy
-
         exponentiated = np.exp(np.multiply(array, -self.gamma))
         total = sum(exponentiated)
         return np.divide(exponentiated, total)
@@ -405,8 +403,9 @@ class DDREnvIterative(DDREnvSoftmin):
         if self.iter_idx == 0:
             self.edge_set = np.zeros(self.graph.number_of_edges(), dtype=float)
             # TODO: try with and without zeroing this
-            # self.edge_values = np.zeros(self.graph.number_of_edges(),
-            #                             dtype=float)
+            self.edge_values = np.full(self.graph.number_of_edges(),
+                                       0.5,
+                                       dtype=float)
 
             new_dm = next(self.dm_generator, None)
             if new_dm is None:
@@ -415,7 +414,8 @@ class DDREnvIterative(DDREnvSoftmin):
                 self.dm_memory.append(new_dm)
                 if len(self.dm_memory) > self.dm_memory_length:
                     self.dm_memory.pop(0)
-            np.random.shuffle(self.edge_order)
+            # TODO: put shuffle back in
+            # np.random.shuffle(self.edge_order)
 
         data_dict = self.get_data_dict()
 
