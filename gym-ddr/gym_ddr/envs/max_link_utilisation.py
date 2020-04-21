@@ -1,4 +1,3 @@
-from functools import reduce
 from typing import Tuple
 
 import networkx as nx
@@ -13,7 +12,7 @@ class MaxLinkUtilisation:
     """
     Class for calculating all things relating to max link utilisation over a
     graph. Can find optimal routing for a set of demands or calculate the
-    utilisation gfiv
+    utilisation
     """
 
     def __init__(self, graph: nx.DiGraph, epsilon: float = 1.e-6):
