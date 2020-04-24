@@ -8,7 +8,7 @@ from scipy.special import softmax
 from .max_link_utilisation import MaxLinkUtilisation
 
 Routing = np.ndarray
-Demand = np.ndarray
+Demand = Tuple[np.ndarray, float]
 Observation = np.ndarray
 Action = np.ndarray
 
@@ -33,7 +33,9 @@ class DDREnv(gym.Env):
                  oblivious_routing: np.ndarray = None):
         """
         Args:
-          dm_sequence:  the sequence of sequences of dms to use
+          dm_sequence: the sequence of sequences of dms to use. This is a list
+                       of dm sequences where each dm in the sequence is a tuple
+                       of demand matrix and optimal max-link-utilisation
           dm_memory_length: the length of the dm history we should train on
           graph: the graph we will be routing over
           oblivious_routing: an oblivious routing
@@ -128,8 +130,8 @@ class DDREnv(gym.Env):
         Reward calculated as utilisation of graph given routing compared to
         optimal. May have to call external libraries to calculate efficiently.
         """
-        self.utilisation = self.mlu.calc(self.dm_memory[0], routing)
-        self.opt_utilisation = self.mlu.opt(self.dm_memory[0])
+        self.utilisation = self.mlu.calc(self.dm_memory[0][0], routing)
+        self.opt_utilisation = self.dm_memory[0][1]
         return -(self.utilisation / self.opt_utilisation)
 
     def get_observation(self) -> Observation:
@@ -138,7 +140,8 @@ class DDREnv(gym.Env):
         Returns:
             A flat np array of the demand matrix
         """
-        return np.stack(self.dm_memory).ravel()
+        dm_no_opt_memory = [dm[0] for dm in self.dm_memory]
+        return np.stack(dm_no_opt_memory).ravel()
 
     def get_data_dict(self) -> Dict:
         """
@@ -153,7 +156,7 @@ class DDREnv(gym.Env):
         }
         if self.oblivious_routing is not None:
             data_dict['oblivious_utilisation'] = self.mlu.calc(
-                self.dm_memory[0], self.oblivious_routing)
+                self.dm_memory[0][0], self.oblivious_routing)
         return data_dict
 
 
@@ -275,6 +278,7 @@ class DDREnvSoftmin(DDREnv):
         Returns:
             A fully specified routing (dims 0: flows, 1: edges)
         """
+        # TODO: optimise this method. Is too slow
         full_routing = np.zeros((len(self.flows), self.graph.number_of_edges()),
                                 dtype=np.float32)
 
@@ -309,11 +313,7 @@ class DDREnvSoftmin(DDREnv):
                 for out_edge_idx, weight in enumerate(softmin_weights):
                     full_routing[flow_idx][
                         self.edge_index_map[out_edges[out_edge_idx]]] = weight
-                    # TODO: fully test this before being happy so am sure it works
 
-        # with np.printoptions(threshold=np.inf):
-        #     print(action)
-        #     print(full_routing)
         return full_routing
 
     def softmin(self, array: np.ndarray) -> np.ndarray:
@@ -387,8 +387,6 @@ class DDREnvIterative(DDREnvSoftmin):
         if self.done:
             return self.get_observation(), 0.0, self.done, dict()
 
-
-
         # add action to the overall routing
         edge_idx = self.edge_order[(self.iter_idx - 1) % self.iter_length]
         # shift from -1->1 to 0->1
@@ -401,7 +399,6 @@ class DDREnvIterative(DDREnvSoftmin):
         # iteration start: update dm and shuffle the edge order
         #                  also calc prev routing and give reward
         # TODO: see how it performs without the shuffle
-
         if self.iter_idx == 0:
             self.edge_set = np.zeros(self.graph.number_of_edges(), dtype=float)
             # TODO: try with and without zeroing this
@@ -414,7 +411,7 @@ class DDREnvIterative(DDREnvSoftmin):
             if self.dm_index == len(self.dm_sequence[self.dm_sequence_index]):
                 self.done = True
                 self.dm_sequence_index = (self.dm_sequence_index + 1) % len(
-                self.dm_sequence)
+                    self.dm_sequence)
             else:
                 new_dm = self.dm_sequence[self.dm_sequence_index][self.dm_index]
                 self.dm_memory.append(new_dm)
@@ -456,7 +453,8 @@ class DDREnvIterative(DDREnvSoftmin):
         iter_info = np.empty((self.graph.number_of_edges() * 2,), dtype=float)
         iter_info[0::2] = self.edge_set
         iter_info[1::2] = target_edge
-        return np.concatenate((np.stack(self.dm_memory).ravel(), iter_info))
+        dm_no_opt_memory = [dm[0] for dm in self.dm_memory]
+        return np.concatenate((np.stack(dm_no_opt_memory).ravel(), iter_info))
 
     def get_data_dict(self) -> Dict:
         """
