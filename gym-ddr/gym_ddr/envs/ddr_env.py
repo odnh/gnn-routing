@@ -372,6 +372,9 @@ class DDREnvIterative(DDREnvSoftmin):
         # current softmin edge values
         self.edge_values = np.zeros(graph.number_of_edges(), dtype=float)
 
+        # save the last reward so in each step we see how much we improved
+        self.last_reward = 0
+
     def step(self, action: Type[np.ndarray]) -> Tuple[Observation,
                                                       float,
                                                       bool, Dict[None, None]]:
@@ -394,19 +397,23 @@ class DDREnvIterative(DDREnvSoftmin):
         self.edge_set[edge_idx] = 1
 
         routing = self.get_routing(self.edge_values)
+
+        # calculate and save reward
         reward = self.get_reward(routing)
+        # so reward given to learner is actually the improvement
+        comparison_reward = reward - self.last_reward
+        self.last_reward = reward
 
         # iteration start: update dm and shuffle the edge order
         #                  also calc prev routing and give reward
         # TODO: see how it performs without the shuffle
         if self.iter_idx == 0:
             self.edge_set = np.zeros(self.graph.number_of_edges(), dtype=float)
-            # TODO: try with and without zeroing this
-            # TODO: try comparison to prev method
+            # Set to midvalue at start so algorithm can change each edge to be
+            # more or less favourable
             self.edge_values = np.full(self.graph.number_of_edges(),
                                        0.5,
                                        dtype=float)
-
             self.dm_index += 1
             if self.dm_index == len(self.dm_sequence[self.dm_sequence_index]):
                 self.done = True
@@ -418,11 +425,11 @@ class DDREnvIterative(DDREnvSoftmin):
                 if len(self.dm_memory) > self.dm_memory_length:
                     self.dm_memory.pop(0)
             np.random.shuffle(self.edge_order)
+        # inside an iteration so just change the index
+        self.iter_idx = (self.iter_idx + 1) % self.iter_length
 
         data_dict = self.get_data_dict()
-
-        self.iter_idx = (self.iter_idx + 1) % self.iter_length
-        return self.get_observation(), reward, self.done, data_dict
+        return self.get_observation(), comparison_reward, self.done, data_dict
 
     def reset(self) -> Observation:
         self.dm_index = 0
