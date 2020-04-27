@@ -2,18 +2,19 @@ import tensorflow as tf
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
+import gym_ddr
 import gym
 import gym_ddr.envs.demand_matrices as dm
 from gym_ddr.envs.max_link_utilisation import MaxLinkUtilisation
 import numpy as np
 from ddr_learning_helpers import graphs
-from stable_baselines.common.vec_env import SubprocVecEnv, VecNormalize
+from stable_baselines.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines import PPO2
 from stable_baselines_ddr.gnn_policy import GnnDdrPolicy
 
 from ray import tune
 
-def tune_ddr_gnn(config):
+def tune_ddr_gnn(config, reporter):
     # load/generate graph
     # graph = graphs.topologyzoo("TLex", 10000)
     graph = graphs.basic()
@@ -40,7 +41,7 @@ def tune_ddr_gnn(config):
                            graph=graph,
                            oblivious_routing=oblivious_routing)
 
-    vec_env = SubprocVecEnv([env, env, env, env])
+    vec_env = DummyVecEnv([env])
     # Try with and without. May interfere with iter
     normalised_env = VecNormalize(vec_env, training=True, norm_obs=True,
                                   norm_reward=False)
@@ -52,12 +53,11 @@ def tune_ddr_gnn(config):
                  verbose=1,
                  policy_kwargs={'network_graph': graph,
                                 'dm_memory_length': dm_memory_length,
-                                'vf_arch': "graph"},
-                 tensorboard_log="./gnn_tensorboard/")
+                                'vf_arch': "graph"})
 
     # learn
     # TODO: pass in config args?
-    model.learn(total_timesteps=10000, tb_log_name="gnn_softmin_basic")
+    model.learn(total_timesteps=10000)
 
     total_rewards = 0
     obs = normalised_env.reset()
@@ -65,11 +65,14 @@ def tune_ddr_gnn(config):
         action, _states = model.predict(obs)
         obs, rewards, dones, info = normalised_env.step(action)
         total_rewards += sum(rewards)
-    return total_rewards / steps_in_episode  # TODO: work out if this is actully the right thing to return
+    reporter(mean_reward=total_rewards / steps_in_episode)
+    normalised_env.close()
 
 
 if __name__ == "__main__":
     analysis = tune.run(
-    tune_ddr_gnn, config={"lr": tune.grid_search([0.001, 0.01, 0.1])})
+        tune_ddr_gnn,
+        config={"batch_size": tune.grid_search([0.001, 0.01, 0.1])},
+        resources_per_trial={'cpu': 1, 'gpu': 1})
 
-    print("Best config: ", analysis.get_best_config(metric="mean_accuracy"))
+    print("Best config: ", analysis.get_best_config(metric="mean_reward"))
