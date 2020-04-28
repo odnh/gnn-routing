@@ -51,16 +51,15 @@ def tune_ddr_gnn(config, reporter):
                                   norm_reward=False)
 
     # make model
-    # TODO: pass in config args
     model = PPO2(GnnDdrPolicy,
                  normalised_env,
                  verbose=1,
                  policy_kwargs={'network_graph': graph,
                                 'dm_memory_length': dm_memory_length,
-                                'vf_arch': "graph"})
+                                'vf_arch': "graph"},
+                 **config)
 
     # learn
-    # TODO: pass in config args?
     model.learn(total_timesteps=10000)
 
     total_rewards = 0
