@@ -22,7 +22,6 @@ if __name__ == "__main__":
     num_demands = graph.number_of_nodes() * (graph.number_of_nodes() - 1)  # Demand matrix size (dependent on graph size
     dm_generator_getter = lambda seed: dm.cyclical_sequence(  # A function that returns a generator for a sequence of demands
         lambda rs_l: dm.bimodal_demand(num_demands, rs_l), 50, 5, 0.0, seed=seed)
-    # demand_sequences = [list(dm_generator_getter()) for i in range(2)]  # Collect the generator into a sequence
     mlu = MaxLinkUtilisation(graph)  # Friendly max link utilisation class
     demand_sequences = map(dm_generator_getter, [32, 32])
     demands_with_opt = [[(demand, mlu.opt(demand)) for demand in sequence] for  # Merge opt calculations into the demand sequence
@@ -37,7 +36,7 @@ if __name__ == "__main__":
                            graph=graph,
                            oblivious_routing=oblivious_routing)
 
-    vec_env = SubprocVecEnv([env, env, env, env])
+    vec_env = SubprocVecEnv([env, env, env, env], start_method="spawn")
     # Try with and without. May interfere with iter
     normalised_env = VecNormalize(vec_env, training=True, norm_obs=True,
                                   norm_reward=False)
@@ -56,10 +55,11 @@ if __name__ == "__main__":
     model.save("./model_gnn_softmin_basic")
 
     # use
-
     obs = normalised_env.reset()
     for i in range(41):
         action, _states = model.predict(obs)
         obs, rewards, dones, info = normalised_env.step(action)
         print(rewards)
         print(info)
+
+    vec_env.close()

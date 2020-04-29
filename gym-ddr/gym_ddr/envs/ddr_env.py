@@ -374,8 +374,6 @@ class DDREnvIterative(DDREnvSoftmin):
 
         # save the last reward so in each step we see how much we improved
         self.last_reward = 0
-        # reward from end of iteration for logging
-        self.episode_total_reward = 0
 
     def step(self, action: Type[np.ndarray]) -> Tuple[Observation,
                                                       float,
@@ -417,7 +415,6 @@ class DDREnvIterative(DDREnvSoftmin):
                                        0.5,
                                        dtype=float)
             self.dm_index += 1
-            self.episode_total_reward += reward
             if self.dm_index == len(self.dm_sequence[self.dm_sequence_index]):
                 self.done = True
                 self.dm_sequence_index = (self.dm_sequence_index + 1) % len(
@@ -485,7 +482,7 @@ class DDREnvIterative(DDREnvSoftmin):
         # Extra logging for tensorboard at the end of an episode
         if self.done:
             data_dict.update(
-                {'episode': {'r': self.episode_total_reward / self.dm_index,
+                {'episode': {'r': self.last_reward,
                              'l': self.dm_index}})
             self.episode_total_reward = 0.0
         return data_dict

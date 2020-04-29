@@ -50,6 +50,11 @@ def tune_ddr_gnn(config, reporter):
     normalised_env = VecNormalize(vec_env, training=True, norm_obs=True,
                                   norm_reward=False)
 
+    # set the minibatch param properly from the config
+    config['nminibatches'] = max(1,
+                                 int(config['n_steps'] / config['batch_size']))
+    del config['batch_size']
+
     # make model
     model = PPO2(GnnDdrPolicy,
                  normalised_env,

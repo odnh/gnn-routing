@@ -1,4 +1,5 @@
 import tensorflow as tf
+from gym_ddr.envs.max_link_utilisation import MaxLinkUtilisation
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
@@ -15,26 +16,27 @@ if __name__ == "__main__":
     graph = graphs.topologyzoo("TLex", 10000)
     # graph = graphs.basic()
 
-    # set env parameters
-    rs = np.random.RandomState()
-    dm_memory_length = 10
-    num_demands = graph.number_of_nodes() * (graph.number_of_nodes() - 1)
-    num_edges = graph.number_of_edges()
-    dm_generator_getter = lambda: dm.cyclical_sequence(
-        lambda rs_l: dm.bimodal_demand(num_demands, rs_l), 50, 5, 0.0, seed=32)
-    # dm_generator_getter = lambda: dm.average_sequence(
-    #     lambda: dm.gravity_demand(graph), 40, 5, 0.4, rs)
+    ## ENV PARAMETERS
+    rs = np.random.RandomState()  # Random state
+    dm_memory_length = 10  # Length of memory of dms in each observation
+    num_demands = graph.number_of_nodes() * (graph.number_of_nodes() - 1)  # Demand matrix size (dependent on graph size
+    dm_generator_getter = lambda seed: dm.cyclical_sequence(  # A function that returns a generator for a sequence of demands
+        lambda rs_l: dm.bimodal_demand(num_demands, rs_l), 20, 5, 0.0, seed=seed)
+    mlu = MaxLinkUtilisation(graph)  # Friendly max link utilisation class
+    demand_sequences = map(dm_generator_getter, [28])
+    demands_with_opt = [[(demand, mlu.opt(demand)) for demand in sequence] for  # Merge opt calculations into the demand sequence
+                        sequence in demand_sequences]
 
-    oblivious_routing = None#yates.get_oblivious_routing(graph)
+    oblivious_routing = None  # yates.get_oblivious_routing(graph)
 
     # make env
     env = lambda: gym.make('ddr-softmin-v0',
-                           dm_sequence=[list(dm_generator_getter())],
+                           dm_sequence=demands_with_opt,
                            dm_memory_length=dm_memory_length,
                            graph=graph,
                            oblivious_routing=oblivious_routing)
 
-    vec_env = SubprocVecEnv([env, env, env, env])
+    vec_env = SubprocVecEnv([env, env, env, env], start_method="spawn")
     # Try with and without. May interfere with iter
     normalised_env = VecNormalize(vec_env, training=True, norm_obs=True,
                                   norm_reward=False)
