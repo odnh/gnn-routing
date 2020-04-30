@@ -1,6 +1,6 @@
 import opentuner
 from opentuner import ConfigurationManipulator, EnumParameter
-from opentuner import IntegerParameter, LogFloatParameter
+from opentuner import LogFloatParameter
 from opentuner import MeasurementInterface
 from opentuner import Result
 
