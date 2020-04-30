@@ -28,13 +28,14 @@ class MaxLinkUtilisation:
         self.commodities = [(i, j) for i in range(self.num_nodes) for j in
                             range(self.num_nodes) if i != j]
         # ones so no div by zero
-        self.edge_capacities = np.zeros((self.num_nodes, self.num_nodes),
-                                        dtype=float)
+        self.edge_capacities = np.ones((self.num_nodes, self.num_nodes),
+                                       dtype=float)
         for edge in self.edges:
             self.edge_capacities[edge[0]][edge[1]] = edge[2]['weight']
 
         # to see if the previous change was small enough to end calculation
-        self.min_delta = np.full((self.num_nodes, self.num_nodes), self.epsilon, dtype=float)
+        self.min_delta = np.full((self.num_nodes, self.num_nodes), self.epsilon,
+                                 dtype=float)
 
     def calc_demand(self, routing: np.ndarray, demand: float,
                     commodity_idx: int) -> np.ndarray:
@@ -64,7 +65,9 @@ class MaxLinkUtilisation:
             change = np.multiply(split_matrix, node_flow)
             edge_utilisation += change
             node_flow = np.matmul(split_matrix, node_flow)
-            comparison = np.less(change, self.min_delta)
+            if np.any(np.isnan(change)):
+                print("is_nan :'(")
+            comparison = np.less(np.nan_to_num(change), self.min_delta)
             if np.logical_and.reduce(np.logical_and.reduce(comparison)):
                 break
 
@@ -85,11 +88,11 @@ class MaxLinkUtilisation:
 
         for commodity_idx in range(len(self.commodities)):
             utilisation = self.calc_demand(routing,
-                                                  demands[commodity_idx],
-                                                  commodity_idx)
+                                           demands[commodity_idx],
+                                           commodity_idx)
             total_utilisation += utilisation
 
-        return np.nanmax(np.divide(total_utilisation, self.edge_capacities))
+        return np.max(np.divide(total_utilisation, self.edge_capacities))
 
     def opt(self, demands: Demand) -> float:
         """
