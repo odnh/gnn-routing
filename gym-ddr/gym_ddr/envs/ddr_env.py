@@ -86,9 +86,11 @@ class DDREnv(gym.Env):
         self.dm_index += 1
         if self.dm_index == len(self.dm_sequence[self.dm_sequence_index]):
             self.done = True
-            # Move to the next dm sequence
-            self.dm_sequence_index = (self.dm_sequence_index + 1) % len(
-                self.dm_sequence)
+            # Move to the next dm sequence (choose randomly)
+            self.dm_sequence_index = np.random.randint(0, len(self.dm_sequence))
+            # Move to the next dm sequence (iterate)
+            # self.dm_sequence_index = (self.dm_sequence_index + 1) % len(
+            #     self.dm_sequence)
             return self.get_observation(), 0.0, self.done, dict()
         else:
             new_dm = self.dm_sequence[self.dm_sequence_index][self.dm_index]
@@ -417,8 +419,12 @@ class DDREnvIterative(DDREnvSoftmin):
             self.dm_index += 1
             if self.dm_index == len(self.dm_sequence[self.dm_sequence_index]):
                 self.done = True
-                self.dm_sequence_index = (self.dm_sequence_index + 1) % len(
-                    self.dm_sequence)
+                # Move to next dm sequence (randomly)
+                self.dm_sequence_index = np.random.randint(0, len(
+                    self.dm_sequence))
+                # Move to next dm sequence (iterate)
+                # self.dm_sequence_index = (self.dm_sequence_index + 1) % len(
+                #     self.dm_sequence)
             else:
                 new_dm = self.dm_sequence[self.dm_sequence_index][self.dm_index]
                 self.dm_memory.append(new_dm)
