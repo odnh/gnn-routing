@@ -444,6 +444,19 @@ class LstmPolicyWithGnn(RecurrentActorCriticPolicy):
                               self.dones_ph: mask})
 
 
+class MlpDdrPolicy(FeedForwardPolicyWithGnn):
+    """
+    Policy for data driven routing using a GCN. Idea is that inputs are a vector
+    of demands to each destination given to each node. Then outputs are a value
+    at each edge to be used as a "softmin" splitting ratio. This will hopefully
+    give some level of generalisability.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(MlpDdrPolicy, self).__init__(*args, **kwargs,
+                                           feature_extraction="mlp")
+
+
 class GnnDdrPolicy(FeedForwardPolicyWithGnn):
     """
     Policy for data driven routing using a GCN. Idea is that inputs are a vector
@@ -454,12 +467,6 @@ class GnnDdrPolicy(FeedForwardPolicyWithGnn):
 
     def __init__(self, *args, **kwargs):
         super(GnnDdrPolicy, self).__init__(*args, **kwargs,
-                                           feature_extraction="gnn")
-
-
-class GnnLstmDdrPolicy(LstmPolicyWithGnn):
-    def __init__(self, *args, **kwargs):
-        super(GnnLstmDdrPolicy, self).__init__(*args, **kwargs,
                                            feature_extraction="gnn")
 
 
@@ -476,7 +483,19 @@ class GnnDdrIterativePolicy(FeedForwardPolicyWithGnn):
                                                     feature_extraction="gnn_iter")
 
 
+class MlpLstmDdrPolicy(LstmPolicyWithGnn):
+    def __init__(self, *args, **kwargs):
+        super(MlpLstmDdrPolicy, self).__init__(*args, **kwargs,
+                                               feature_extraction="mlp")
+
+
+class GnnLstmDdrPolicy(LstmPolicyWithGnn):
+    def __init__(self, *args, **kwargs):
+        super(GnnLstmDdrPolicy, self).__init__(*args, **kwargs,
+                                               feature_extraction="gnn")
+
+
 class GnnLstmDdrIterativePolicy(LstmPolicyWithGnn):
     def __init__(self, *args, **kwargs):
         super(GnnLstmDdrIterativePolicy, self).__init__(*args, **kwargs,
-                                           feature_extraction="gnn_iter")
+                                                        feature_extraction="gnn_iter")
