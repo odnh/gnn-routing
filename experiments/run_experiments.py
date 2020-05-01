@@ -85,17 +85,18 @@ def demands_from_args(args: Dict, graph: nx.DiGraph) -> List[
 def policy_from_args(args: Dict, graph: nx.DiGraph) -> Tuple[
     ActorCriticPolicy, Dict]:
     policy_kwargs = {}
+    dm_memory_length = 1 if args['lstm'] else args['memory_length']
     if args['policy'] == 'gnn':
         policy = GnnLstmDdrPolicy if args['lstm'] else GnnDdrPolicy
         policy_kwargs = {'network_graph': graph,
-                         'dm_memory_length': args['memory_length'],
+                         'dm_memory_length': dm_memory_length,
                          'vf_arch': args['vf_arch'],
                          }
     elif args['policy'] == 'iter':
         policy = GnnLstmDdrIterativePolicy if args[
             'lstm'] else GnnDdrIterativePolicy
         policy_kwargs = {'network_graph': graph,
-                         'dm_memory_length': args['memory_length'],
+                         'dm_memory_length': dm_memory_length,
                          'vf_arch': args['vf_arch']}
     else:
         policy = MlpLstmDdrPolicy if args['lstm'] else MlpDdrPolicy

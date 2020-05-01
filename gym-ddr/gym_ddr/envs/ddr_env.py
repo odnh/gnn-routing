@@ -338,8 +338,6 @@ class DDREnvIterative(DDREnvSoftmin):
     one edge which is selected in the observation at the start of the step.
     """
 
-    # TODO: try non-softmin version too (i.e. dest-based)
-
     def __init__(self,
                  dm_sequence: List[List[Demand]],
                  dm_memory_length: int,

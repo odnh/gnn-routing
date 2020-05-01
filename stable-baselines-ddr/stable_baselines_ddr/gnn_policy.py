@@ -286,10 +286,12 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
     """
 
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                 reuse=False, layers=None, net_arch=None,
+                 reuse=False, layers=None,
+                 net_arch=dict(vf=[128, 128, 128], pi=[128, 128, 128]),
                  act_fun=tf.tanh, cnn_extractor=nature_cnn,
                  feature_extraction="cnn", network_graph=None,
-                 dm_memory_length=None, iterations=10, vf_arch="mlp", **kwargs):
+                 dm_memory_length=None, iterations=10, vf_arch="graph",
+                 **kwargs):
         super(FeedForwardPolicyWithGnn, self).__init__(sess, ob_space, ac_space,
                                                        n_env, n_steps, n_batch,
                                                        reuse=reuse, scale=(
@@ -372,7 +374,7 @@ class LstmPolicyWithGnn(RecurrentActorCriticPolicy):
 
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
                  n_lstm=256, reuse=False, layers=None,
-                 net_arch=dict(vf=[64, 64, 64], pi=[64, 64, 64]),
+                 net_arch=dict(vf=[128, 128, 128], pi=[128, 128, 128]),
                  act_fun=tf.tanh, cnn_extractor=nature_cnn,
                  layer_norm=False, feature_extraction="cnn",
                  network_graph=None, iterations=10, vf_arch="graph",
