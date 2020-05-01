@@ -46,9 +46,6 @@ if __name__ == "__main__":
                            oblivious_routing=oblivious_routing)
 
     vec_env = SubprocVecEnv([env, env, env, env], start_method="spawn")
-    # Try with and without. May interfere with iter
-    # normalised_env = VecNormalize(vec_env, training=True, norm_obs=False,
-    #                               norm_reward=False)
 
     # make model
     model = PPO2(GnnDdrIterativePolicy,
@@ -60,7 +57,6 @@ if __name__ == "__main__":
                                 'vf_arch': "graph",
                                 },
                  tensorboard_log="./gnn_tensorboard/")
-    model.is_tb_set = False  # For extra logging with the callback
 
     # learn
     model.learn(total_timesteps=10000, tb_log_name="gnn_iter_softmin_basic", callback=true_reward_callback)

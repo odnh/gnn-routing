@@ -37,13 +37,10 @@ if __name__ == "__main__":
                            oblivious_routing=oblivious_routing)
 
     vec_env = SubprocVecEnv([env, env, env, env], start_method="spawn")
-    # Try with and without. May interfere with iter
-    normalised_env = VecNormalize(vec_env, training=True, norm_obs=True,
-                                  norm_reward=False)
 
     # make model
     model = PPO2(GnnDdrPolicy,
-                 normalised_env,
+                 vec_env,
                  verbose=1,
                  policy_kwargs={'network_graph': graph,
                                 'dm_memory_length': dm_memory_length,
@@ -55,10 +52,10 @@ if __name__ == "__main__":
     model.save("./model_gnn_softmin_basic")
 
     # use
-    obs = normalised_env.reset()
+    obs = vec_env.reset()
     for i in range(41):
         action, _states = model.predict(obs)
-        obs, rewards, dones, info = normalised_env.step(action)
+        obs, rewards, dones, info = vec_env.step(action)
         print(rewards)
         print(info)
 

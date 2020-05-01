@@ -13,8 +13,8 @@ from stable_baselines.common.policies import MlpPolicy
 
 if __name__ == "__main__":
     # load/generate graph
-    graph = graphs.topologyzoo("TLex", 10000)
-    # graph = graphs.basic()
+    #graph = graphs.topologyzoo("TLex", 10000)
+    graph = graphs.basic()
 
     ## ENV PARAMETERS
     rs = np.random.RandomState()  # Random state
@@ -37,13 +37,10 @@ if __name__ == "__main__":
                            oblivious_routing=oblivious_routing)
 
     vec_env = SubprocVecEnv([env, env, env, env], start_method="spawn")
-    # Try with and without. May interfere with iter
-    normalised_env = VecNormalize(vec_env, training=True, norm_obs=True,
-                                  norm_reward=False)
 
     # make model
     model = PPO2(MlpPolicy,
-                 normalised_env,
+                 vec_env,
                  verbose=1,
                  tensorboard_log="./gnn_tensorboard/")
 
@@ -52,9 +49,9 @@ if __name__ == "__main__":
     model.save("./model_mlp_softmin_basic")
 
     # use
-    obs = normalised_env.reset()
+    obs = vec_env.reset()
     for i in range(61):
         action, _states = model.predict(obs)
-        obs, rewards, dones, info = env.step(action)
+        obs, rewards, dones, info = vec_env.step(action)
         print(rewards)
         print(info)
