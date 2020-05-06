@@ -136,7 +136,7 @@ def argparser() -> argparse.ArgumentParser:
                         help="Name of graph to train on")
     parser.add_argument('-t', action='store', dest='timesteps', type=int,
                         default=10000,
-                        help="NUmber of timesteps of training to perform")
+                        help="Number of timesteps of training to perform")
     parser.add_argument('-m', action='store', dest='memory_length', type=int,
                         default=10,
                         help="Demand matrix memory length")
@@ -164,8 +164,7 @@ def argparser() -> argparse.ArgumentParser:
                         default=None, help="Name to save model as")
     parser.add_argument('-ln', action='store', dest='log_name', default=None,
                         help="Name for tensorboboard log")
-    parser.add_argument('-lstm', action='store_true', dest='lstm', type=bool,
-                        default=False,
+    parser.add_argument('-lstm', action='store_true', dest='lstm',
                         help="Whether to use an lstm layer (default is false)")
     return parser
 
