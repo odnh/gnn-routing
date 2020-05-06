@@ -287,7 +287,7 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
 
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
                  reuse=False, layers=None,
-                 net_arch=dict(vf=[128, 128, 128], pi=[128, 128, 128]),
+                 net_arch=[dict(vf=[128, 128, 128], pi=[128, 128, 128])],
                  act_fun=tf.tanh, cnn_extractor=nature_cnn,
                  feature_extraction="cnn", network_graph=None,
                  dm_memory_length=None, iterations=10, vf_arch="graph",
@@ -374,7 +374,7 @@ class LstmPolicyWithGnn(RecurrentActorCriticPolicy):
 
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
                  n_lstm=256, reuse=False, layers=None,
-                 net_arch=dict(vf=[128, 128, 128], pi=[128, 128, 128]),
+                 net_arch=[dict(vf=[128, 128, 128], pi=[128, 128, 128])],
                  act_fun=tf.tanh, cnn_extractor=nature_cnn,
                  layer_norm=False, feature_extraction="cnn",
                  network_graph=None, iterations=10, vf_arch="graph",
@@ -403,6 +403,8 @@ class LstmPolicyWithGnn(RecurrentActorCriticPolicy):
                                          n_hidden=n_lstm,
                                          layer_norm=layer_norm)
             latent = seq_to_batch(rnn_output)
+
+            # TODO: this is WRONG because need to split edge from node embedding (for iterative). Also for no-iter thing there is also an issue
 
             if feature_extraction == "gnn":
                 pi_latent, vf_latent = gnn_extractor(
