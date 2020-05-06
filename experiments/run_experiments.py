@@ -5,6 +5,7 @@ from typing import List, Dict, Tuple
 
 import networkx as nx
 import yaml
+import json
 from ddr_learning_helpers import graphs
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -64,7 +65,9 @@ def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
                     callback=true_reward_callback)
     else:
         model.learn(total_timesteps=timesteps, tb_log_name=args['log_name'])
+
     model.save(args['model_name'])
+    vec_env.close()
 
 
 def demands_from_args(args: Dict, graph: nx.DiGraph) -> List[
@@ -179,7 +182,7 @@ def read_hyperparameters(args: Dict) -> Dict:
     hyperparameters = {}
     if args['hyperparameters']:
         with open(args['hyperparameters'], 'r') as stream:
-            hyperparameters = yaml.safe_load(stream)
+            hyperparameters = json.load(stream)
     return hyperparameters
 
 

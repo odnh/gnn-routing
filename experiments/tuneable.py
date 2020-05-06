@@ -1,4 +1,5 @@
 import tensorflow as tf
+from stable_baselines.common.policies import MlpPolicy
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
@@ -19,16 +20,16 @@ def tuneable(config):
 
     ## ENV PARAMETERS
     rs = np.random.RandomState()  # Random state
-    num_steps = 20
+    num_steps = 10
     dm_memory_length = 10  # Length of memory of dms in each observation
     num_demands = graph.number_of_nodes() * (
                 graph.number_of_nodes() - 1)  # Demand matrix size (dependent on graph size
     dm_generator_getter = lambda seed: dm.cyclical_sequence(
         # A function that returns a generator for a sequence of demands
         lambda rs_l: dm.bimodal_demand(num_demands, rs_l),
-        num_steps + dm_memory_length, 5, 0.0, seed=seed)
+        num_steps + dm_memory_length, 1, 0.0, seed=seed)
     mlu = MaxLinkUtilisation(graph)  # Friendly max link utilisation class
-    demand_sequences = map(dm_generator_getter, [32])
+    demand_sequences = map(dm_generator_getter, [42])
     demands_with_opt = [[(demand, mlu.opt(demand)) for demand in sequence] for
                         # Merge opt calculations into the demand sequence
                         sequence in demand_sequences]
@@ -49,18 +50,25 @@ def tuneable(config):
                                  1)
     del config['batch_size']
 
+
     # make model
-    model = PPO2(GnnDdrPolicy,
+    model = PPO2(MlpPolicy,
                  vec_env,
                  verbose=0,
-                 policy_kwargs={'network_graph': graph,
-                                'dm_memory_length': dm_memory_length,
-                                'vf_arch': "graph"},
+                 tensorboard_log="./tune_tensorboard/",
                  **config)
 
+    # make model
+    # model = PPO2(GnnDdrPolicy,
+    #              vec_env,
+    #              verbose=0,
+    #              policy_kwargs={'network_graph': graph,
+    #                             'dm_memory_length': dm_memory_length,
+    #                             'vf_arch': "graph"},
+    #              **config)
+
     # learn
-    model.learn(total_timesteps=10000, tb_log_name="gnn_softmin_basic")
-    model.save("./model_gnn_softmin_basic")
+    model.learn(total_timesteps=5000, tb_log_name="gnn_softmin_basic")
 
     # use
     obs = vec_env.reset()

@@ -14,7 +14,7 @@ class DdrTuner(MeasurementInterface):
         ConfigurationManipulator
         """
         manipulator = ConfigurationManipulator()
-        manipulator.add_parameter(LogFloatParameter('learning_rate', 1e-5, 1))
+        manipulator.add_parameter(LogFloatParameter('learning_rate', 1e-5, 1e-1))
         manipulator.add_parameter(EnumParameter('gamma', [0.9, 0.99, 0.9999]))
         manipulator.add_parameter(EnumParameter('batch_size', [32, 64, 256]))
         manipulator.add_parameter(EnumParameter('n_steps', [128]))
@@ -27,15 +27,17 @@ class DdrTuner(MeasurementInterface):
         """
         cfg = desired_result.configuration.data
 
+        print("Running with config: ", cfg)
         result = tuneable(cfg)
+        print("Config: ", cfg, "\nResult: ", result)
 
-        return Result(time=result)
+        return Result(time=-result)
 
     def save_final_config(self, configuration):
         """called at the end of tuning"""
-        print("Optimal block size written to mmm_final_config.json:", configuration.data)
-        self.manipulator().save_to_file(configuration.data,
-                                        'mmm_final_config.json')
+        print("Optimal hyperparameters written to hyperparams_final.json:", configuration.data)
+        self.manipulator().save_to_file(repr(configuration.data).encode('utf-8'),
+                                        'hyperparams_final.json')
 
 
 if __name__ == '__main__':
