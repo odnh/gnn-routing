@@ -391,7 +391,7 @@ class DDREnvIterative(DDREnvSoftmin):
             return self.get_observation(), 0.0, self.done, dict()
 
         # add action to the overall routing
-        edge_idx = self.edge_order[(self.iter_idx - 1) % self.iter_length]
+        edge_idx = self.edge_order[self.iter_idx % self.iter_length]
         # shift from -1->1 to 0->1
         self.edge_values[edge_idx] = (action[0] + 1.0) / 2.0
         self.edge_set[edge_idx] = 1

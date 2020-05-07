@@ -55,17 +55,29 @@ def run_model(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
     model.load(model_path)
 
     # execute
-    obs = vec_env.reset()
-    total_rewards = 0
-    for i in range(replay_steps):
-        action, _states = model.predict(obs)
-        obs, rewards, dones, info = vec_env.step(action)
-        print(rewards)
-        print(info[0])
-        total_rewards += sum(rewards)
-
-    print("Mean reward: ", total_rewards / replay_steps)
-
+    if env_name == 'ddr-iterative-v0':
+        obs = vec_env.reset()
+        reward_inc = 0
+        total_rewards = 0
+        for i in range(replay_steps):
+            action, _states = model.predict(obs)
+            obs, rewards, dones, info = vec_env.step(action)
+            print(rewards)
+            print(info[0])
+            if sum(info[0]['edge_set']) == 0:
+                reward_inc += 1
+            total_rewards += sum(rewards)
+        print("Mean reward: ", total_rewards / reward_inc)
+    else:
+        obs = vec_env.reset()
+        total_rewards = 0
+        for i in range(replay_steps):
+            action, _states = model.predict(obs)
+            obs, rewards, dones, info = vec_env.step(action)
+            print(rewards)
+            print(info[0])
+            total_rewards += sum(rewards)
+        print("Mean reward: ", total_rewards / replay_steps)
     vec_env.close()
 
 
