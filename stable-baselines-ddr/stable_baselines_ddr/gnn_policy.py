@@ -468,7 +468,7 @@ class LstmPolicyWithGnn(RecurrentActorCriticPolicy):
             input_sequence = batch_to_seq(latent, self.n_env, n_steps)
             masks = batch_to_seq(self.dones_ph, self.n_env, n_steps)
             rnn_output, self.snew = custom_lstm(input_sequence, masks,
-                                                self.states_ph, 'lstm1',
+                                                self.states_ph, 'lstm1', n_lstm,
                                                 layer_norm=layer_norm)
             latent = seq_to_batch(rnn_output)
 
