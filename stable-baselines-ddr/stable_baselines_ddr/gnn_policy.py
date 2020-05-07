@@ -363,7 +363,7 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
         super(FeedForwardPolicyWithGnn, self).__init__(sess, ob_space, ac_space,
                                                        n_env, n_steps, n_batch,
                                                        reuse=reuse, scale=(
-                    feature_extraction == "cnn"))
+                        feature_extraction == "cnn"))
 
         self._kwargs_check(feature_extraction, kwargs)
 
@@ -447,7 +447,7 @@ class LstmPolicyWithGnn(RecurrentActorCriticPolicy):
                  network_graph=None, iterations=10, vf_arch="graph",
                  **kwargs):
         n_lstm = network_graph.number_of_nodes() * (
-                    network_graph.number_of_nodes() - 1)
+                network_graph.number_of_nodes() - 1)
         # state_shape = [n_lstm * 2] dim because of the cell and hidden states of the LSTM
         super(LstmPolicyWithGnn, self).__init__(sess, ob_space, ac_space, n_env,
                                                 n_steps, n_batch,
@@ -464,15 +464,39 @@ class LstmPolicyWithGnn(RecurrentActorCriticPolicy):
         with tf.variable_scope("model", reuse=reuse):
             latent = tf.layers.flatten(self.processed_obs)
 
-            # start off with building lstm layer over the inputs
-            input_sequence = batch_to_seq(latent, self.n_env, n_steps)
-            masks = batch_to_seq(self.dones_ph, self.n_env, n_steps)
-            rnn_output, self.snew = custom_lstm(input_sequence, masks,
-                                                self.states_ph, 'lstm1', n_lstm,
-                                                layer_norm=layer_norm)
-            latent = seq_to_batch(rnn_output)
+            if feature_extraction == "gnn_iter":
+                # first we split the dm and embedding inputs
+                num_nodes = network_graph.number_of_nodes()
+                demand_matrices = tf.slice(latent, [0, 0],
+                                           [-1, num_nodes * (num_nodes - 1)])
+                node_embedding = tf.slice(latent,
+                                          [0, num_nodes * (num_nodes - 1)],
+                                          [-1, -1])
 
-            # TODO: this is WRONG because need to split edge from node embedding (for iterative). Also for no-iter thing there is also an issue
+                # then we lstm the dm inputs
+                input_sequence = batch_to_seq(demand_matrices, self.n_env,
+                                              n_steps)
+                masks = batch_to_seq(self.dones_ph, self.n_env, n_steps)
+                rnn_output, self.snew = custom_lstm(input_sequence, masks,
+                                                    self.states_ph, 'lstm1',
+                                                    n_lstm,
+                                                    layer_norm=layer_norm)
+                demand_matrices = seq_to_batch(rnn_output)
+
+                # finally we stick it all back together again
+                latent = tf.concat([demand_matrices, node_embedding], axis=1)
+            else:
+                # start off with building lstm layer over the inputs
+                input_sequence = batch_to_seq(latent, self.n_env, n_steps)
+                masks = batch_to_seq(self.dones_ph, self.n_env, n_steps)
+                rnn_output, self.snew = custom_lstm(input_sequence, masks,
+                                                    self.states_ph, 'lstm1',
+                                                    n_lstm,
+                                                    layer_norm=layer_norm)
+                latent = seq_to_batch(rnn_output)
+
+            # TODO: find way to get around fact that LSTM sees same input on repeat in iter case
+            # TODO: deal with variable size input (i.e. if we want to change the graph...)
 
             if feature_extraction == "gnn":
                 pi_latent, vf_latent = gnn_extractor(
