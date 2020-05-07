@@ -1,15 +1,17 @@
 import argparse
 import datetime
+import json
+import multiprocessing
 import os
 from typing import List, Dict, Tuple
 
 import networkx as nx
 import yaml
-import json
 from ddr_learning_helpers import graphs
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
+
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 import gym
@@ -38,7 +40,8 @@ def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
                    demands: List[List[Tuple[np.ndarray, float]]],
                    env_kwargs: Dict = {}, policy_kwargs: Dict = {},
                    hyperparameters: Dict = {}, timesteps: int = 10000,
-                   parallelism: int = 4):
+                   parallelism: int = 4, model_name: str = "",
+                   log_name: str = ""):
     oblivious_routing = None  # yates.get_oblivious_routing(graph)
 
     # make env
@@ -61,12 +64,12 @@ def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
 
     # learn
     if env_name == 'ddr-iterative-v0':
-        model.learn(total_timesteps=timesteps, tb_log_name=args['log_name'],
+        model.learn(total_timesteps=timesteps, tb_log_name=log_name,
                     callback=true_reward_callback)
     else:
-        model.learn(total_timesteps=timesteps, tb_log_name=args['log_name'])
+        model.learn(total_timesteps=timesteps, tb_log_name=log_name)
 
-    model.save(args['model_name'])
+    model.save(model_name)
     vec_env.close()
 
 
@@ -87,7 +90,6 @@ def demands_from_args(args: Dict, graph: nx.DiGraph) -> List[
 
 def policy_from_args(args: Dict, graph: nx.DiGraph) -> Tuple[
     ActorCriticPolicy, Dict]:
-    policy_kwargs = {}
     dm_memory_length = 1 if args['lstm'] else args['memory_length']
     if args['policy'] == 'gnn':
         policy = GnnLstmDdrPolicy if args['lstm'] else GnnDdrPolicy
@@ -103,6 +105,7 @@ def policy_from_args(args: Dict, graph: nx.DiGraph) -> Tuple[
                          'vf_arch': args['vf_arch']}
     else:
         policy = MlpLstmDdrPolicy if args['lstm'] else MlpDdrPolicy
+        policy_kwargs = {'network_graph': graph}
 
     return policy, policy_kwargs
 
@@ -193,6 +196,7 @@ def seed(seed: int):
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method('spawn')
     parser = argparser()
     args = vars(parser.parse_args())
 
@@ -216,5 +220,5 @@ if __name__ == "__main__":
     env_kwargs = env_kwargs_from_args(args)
 
     run_experiment(args['env'], policy, graph, demands, env_kwargs,
-                   policy_kwargs, hyperparameters,
-                   args['timesteps'], args['parallelism'])
+                   policy_kwargs, hyperparameters, args['timesteps'],
+                   args['parallelism'], args['log_name'], args['model_name'])
