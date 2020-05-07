@@ -9,7 +9,7 @@ from stable_baselines.common.policies import ActorCriticPolicy, \
     RecurrentActorCriticPolicy
 from stable_baselines.common.policies import mlp_extractor
 from stable_baselines.common.policies import nature_cnn
-from stable_baselines.common.tf_layers import linear, lstm
+from stable_baselines.common.tf_layers import linear, ortho_init, _ln
 from stable_baselines.common.tf_util import batch_to_seq, seq_to_batch
 
 
@@ -258,6 +258,74 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     return latent_policy_gnn, latent_vf
 
 
+def custom_lstm(input_tensor, mask_tensor, cell_state_hidden, scope, n_hidden,
+                init_scale=1.0, layer_norm=False):
+    """
+    Creates an Long Short Term Memory (LSTM) cell for TensorFlow to be used forr DDR
+
+    :param input_tensor: (TensorFlow Tensor) The input tensor for the LSTM cell
+    :param mask_tensor: (TensorFlow Tensor) The mask tensor for the LSTM cell
+    :param cell_state_hidden: (TensorFlow Tensor) The state tensor for the LSTM cell
+    :param scope: (str) The TensorFlow variable scope
+    :param n_hidden: (int) The number of hidden neurons
+    :param init_scale: (int) The initialization scale
+    :param layer_norm: (bool) Whether to apply Layer Normalization or not
+    :return: (TensorFlow Tensor) LSTM cell
+    """
+    _, n_input = [v.value for v in input_tensor[0].get_shape()]
+    with tf.variable_scope(scope):
+        weight_x = tf.get_variable("wx", [n_input, n_hidden * 4],
+                                   initializer=ortho_init(init_scale))
+        weight_h = tf.get_variable("wh", [n_hidden, n_hidden * 4],
+                                   initializer=ortho_init(init_scale))
+        bias = tf.get_variable("b", [n_hidden * 4],
+                               initializer=tf.constant_initializer(0.0))
+
+        if layer_norm:
+            # Gain and bias of layer norm
+            gain_x = tf.get_variable("gx", [n_hidden * 4],
+                                     initializer=tf.constant_initializer(1.0))
+            bias_x = tf.get_variable("bx", [n_hidden * 4],
+                                     initializer=tf.constant_initializer(0.0))
+
+            gain_h = tf.get_variable("gh", [n_hidden * 4],
+                                     initializer=tf.constant_initializer(1.0))
+            bias_h = tf.get_variable("bh", [n_hidden * 4],
+                                     initializer=tf.constant_initializer(0.0))
+
+            gain_c = tf.get_variable("gc", [n_hidden],
+                                     initializer=tf.constant_initializer(1.0))
+            bias_c = tf.get_variable("bc", [n_hidden],
+                                     initializer=tf.constant_initializer(0.0))
+
+    cell_state, hidden = tf.split(axis=1, num_or_size_splits=2,
+                                  value=cell_state_hidden)
+    for idx, (_input, mask) in enumerate(zip(input_tensor, mask_tensor)):
+        cell_state = cell_state * (1 - mask)
+        hidden = hidden * (1 - mask)
+        if layer_norm:
+            gates = _ln(tf.matmul(_input, weight_x), gain_x, bias_x) \
+                    + _ln(tf.matmul(hidden, weight_h), gain_h, bias_h) + bias
+        else:
+            gates = tf.matmul(_input, weight_x) + tf.matmul(hidden,
+                                                            weight_h) + bias
+        in_gate, forget_gate, out_gate, cell_candidate = tf.split(axis=1,
+                                                                  num_or_size_splits=4,
+                                                                  value=gates)
+        in_gate = tf.nn.sigmoid(in_gate)
+        forget_gate = tf.nn.sigmoid(forget_gate)
+        out_gate = tf.nn.sigmoid(out_gate)
+        cell_candidate = tf.tanh(cell_candidate)
+        cell_state = forget_gate * cell_state + in_gate * cell_candidate
+        if layer_norm:
+            hidden = out_gate * tf.tanh(_ln(cell_state, gain_c, bias_c))
+        else:
+            hidden = out_gate * tf.tanh(cell_state)
+        input_tensor[idx] = hidden
+    cell_state_hidden = tf.concat(axis=1, values=[cell_state, hidden])
+    return input_tensor, cell_state_hidden
+
+
 class FeedForwardPolicyWithGnn(ActorCriticPolicy):
     """
     Modification of stable-baselines FeedForwardPolicy to support gnn feature extraction
@@ -355,7 +423,6 @@ class LstmPolicyWithGnn(RecurrentActorCriticPolicy):
     :param n_env: (int) The number of environments to run
     :param n_steps: (int) The number of steps to run for each environment
     :param n_batch: (int) The number of batch to run (n_envs * n_steps)
-    :param n_lstm: (int) The number of LSTM cells (for recurrent policies)
     :param reuse: (bool) If the policy is reusable or not
     :param layers: ([int]) The size of the Neural network before the LSTM layer  (if None, default to [64, 64])
     :param net_arch: (list) Specification of the actor-critic policy network architecture. Notation similar to the
@@ -373,12 +440,14 @@ class LstmPolicyWithGnn(RecurrentActorCriticPolicy):
     recurrent = True
 
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                 n_lstm=256, reuse=False, layers=None,
+                 reuse=False, layers=None,
                  net_arch=[dict(vf=[128, 128, 128], pi=[128, 128, 128])],
                  act_fun=tf.tanh, cnn_extractor=nature_cnn,
                  layer_norm=False, feature_extraction="cnn",
                  network_graph=None, iterations=10, vf_arch="graph",
                  **kwargs):
+        n_lstm = network_graph.number_of_nodes() * (
+                    network_graph.number_of_nodes() - 1)
         # state_shape = [n_lstm * 2] dim because of the cell and hidden states of the LSTM
         super(LstmPolicyWithGnn, self).__init__(sess, ob_space, ac_space, n_env,
                                                 n_steps, n_batch,
@@ -398,10 +467,9 @@ class LstmPolicyWithGnn(RecurrentActorCriticPolicy):
             # start off with building lstm layer over the inputs
             input_sequence = batch_to_seq(latent, self.n_env, n_steps)
             masks = batch_to_seq(self.dones_ph, self.n_env, n_steps)
-            rnn_output, self.snew = lstm(input_sequence, masks,
-                                         self.states_ph, 'lstm1',
-                                         n_hidden=n_lstm,
-                                         layer_norm=layer_norm)
+            rnn_output, self.snew = custom_lstm(input_sequence, masks,
+                                                self.states_ph, 'lstm1',
+                                                layer_norm=layer_norm)
             latent = seq_to_batch(rnn_output)
 
             # TODO: this is WRONG because need to split edge from node embedding (for iterative). Also for no-iter thing there is also an issue
