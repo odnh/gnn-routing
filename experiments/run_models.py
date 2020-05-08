@@ -43,24 +43,23 @@ def run_model(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
     model = PPO2.load(model_path)
 
     # execute
+    obs = env.reset()
+    state = None
+    total_rewards = 0
     if env_name == 'ddr-iterative-v0':
-        obs = env.reset()
         reward_inc = 0
-        total_rewards = 0
         for i in range(replay_steps):
-            action, _states = model.predict(obs)
+            action, state = model.predict(obs, state=state, deterministic=True)
             obs, reward, done, info = env.step(action)
             print(reward)
             print(info)
             if sum(info['edge_set']) == 0:
                 reward_inc += 1
-                total_rewards += info[0]['real_reward']
+                total_rewards += info['real_reward']
         print("Mean reward: ", total_rewards / reward_inc)
     else:
-        obs = env.reset()
-        total_rewards = 0
         for i in range(replay_steps):
-            action, _states = model.predict(obs)
+            action, state = model.predict(obs, state=state, deterministic=True)
             obs, reward, done, info = env.step(action)
             print(reward)
             print(info)
