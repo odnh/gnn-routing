@@ -82,8 +82,6 @@ def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
         for i in range(evaluation_steps):
             action, _states = model.predict(obs)
             obs, rewards, dones, info = vec_env.step(action)
-            print(rewards)
-            print(info[0])
             if sum(info[0]['edge_set']) == 0:
                 reward_inc += 1
                 total_rewards += info[0]['real_reward'] 
@@ -93,8 +91,6 @@ def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
         for i in range(evaluation_steps):
             action, _states = model.predict(obs)
             obs, rewards, dones, info = vec_env.step(action)
-            print(rewards)
-            print(info[0])
             total_rewards += sum(rewards)
     vec_env.close()
     return total_rewards

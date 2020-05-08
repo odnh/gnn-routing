@@ -18,7 +18,6 @@ import gym_ddr.envs.demand_matrices as dm
 from gym_ddr.envs.max_link_utilisation import MaxLinkUtilisation
 import numpy as np
 from stable_baselines import PPO2
-from stable_baselines.common.vec_env import SubprocVecEnv
 from stable_baselines.common.policies import ActorCriticPolicy
 from stable_baselines_ddr.gnn_policy import MlpDdrPolicy, MlpLstmDdrPolicy, \
     GnnDdrPolicy, GnnDdrIterativePolicy, GnnLstmDdrPolicy, \
@@ -34,51 +33,40 @@ def run_model(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
     oblivious_routing = None  # yates.get_oblivious_routing(graph)
 
     # make env
-    env = lambda: gym.make(env_name,
-                           dm_sequence=demands,
-                           graph=graph,
-                           oblivious_routing=oblivious_routing,
-                           **env_kwargs)
-    vec_env = SubprocVecEnv([env for _ in range(parallelism)],
-                            start_method="spawn")
-
-    # make model
-    model = PPO2(policy,
-                 vec_env,
-                 cliprange_vf=-1,
-                 verbose=1,
-                 policy_kwargs=policy_kwargs,
-                 tensorboard_log="./gnn_tensorboard/",
-                 **hyperparameters)
+    env = gym.make(env_name,
+                   dm_sequence=demands,
+                   graph=graph,
+                   oblivious_routing=oblivious_routing,
+                   **env_kwargs)
 
     # load
-    model.load(model_path)
+    model = PPO2.load(model_path)
 
     # execute
     if env_name == 'ddr-iterative-v0':
-        obs = vec_env.reset()
+        obs = env.reset()
         reward_inc = 0
         total_rewards = 0
         for i in range(replay_steps):
             action, _states = model.predict(obs)
-            obs, rewards, dones, info = vec_env.step(action)
-            print(rewards)
-            print(info[0])
-            if sum(info[0]['edge_set']) == 0:
+            obs, reward, done, info = env.step(action)
+            print(reward)
+            print(info)
+            if sum(info['edge_set']) == 0:
                 reward_inc += 1
-                total_rewards += info[0]['real_reward'] 
+                total_rewards += info[0]['real_reward']
         print("Mean reward: ", total_rewards / reward_inc)
     else:
-        obs = vec_env.reset()
+        obs = env.reset()
         total_rewards = 0
         for i in range(replay_steps):
             action, _states = model.predict(obs)
-            obs, rewards, dones, info = vec_env.step(action)
-            print(rewards)
-            print(info[0])
-            total_rewards += sum(rewards)
+            obs, reward, done, info = env.step(action)
+            print(reward)
+            print(info)
+            total_rewards += reward
         print("Mean reward: ", total_rewards / replay_steps)
-    vec_env.close()
+    env.close()
 
 
 def demands_from_args(args: Dict, graph: nx.DiGraph) -> List[
