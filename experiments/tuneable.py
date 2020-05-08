@@ -75,14 +75,29 @@ def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
         evaluation_steps = len(demands[0])
 
     # see how good this model is
-    obs = vec_env.reset()
-    total_reward = 0.0
-    for i in range(evaluation_steps):
-        action, _states = model.predict(obs)
-        obs, rewards, dones, info = vec_env.step(action)
-        total_reward += rewards[0]
+    if env_name == 'ddr-iterative-v0':
+        obs = vec_env.reset()
+        reward_inc = 0
+        total_rewards = 0
+        for i in range(evaluation_steps):
+            action, _states = model.predict(obs)
+            obs, rewards, dones, info = vec_env.step(action)
+            print(rewards)
+            print(info[0])
+            if sum(info[0]['edge_set']) == 0:
+                reward_inc += 1
+                total_rewards += info[0]['real_reward'] 
+    else:
+        obs = vec_env.reset()
+        total_rewards = 0
+        for i in range(evaluation_steps):
+            action, _states = model.predict(obs)
+            obs, rewards, dones, info = vec_env.step(action)
+            print(rewards)
+            print(info[0])
+            total_rewards += sum(rewards)
     vec_env.close()
-    return total_reward
+    return total_rewards
 
 
 def demands_from_args(args: Dict, graph: nx.DiGraph) -> List[

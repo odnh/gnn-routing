@@ -66,7 +66,7 @@ def run_model(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
             print(info[0])
             if sum(info[0]['edge_set']) == 0:
                 reward_inc += 1
-            total_rewards += sum(rewards)
+                total_rewards += info[0]['real_reward'] 
         print("Mean reward: ", total_rewards / reward_inc)
     else:
         obs = vec_env.reset()
