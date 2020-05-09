@@ -191,7 +191,7 @@ class DDREnvDest(DDREnv):
         super().__init__(dm_sequence, dm_memory_length, graph, **kwargs)
 
         self.action_space = gym.spaces.Box(
-            low=1.0,
+            low=-1.0,
             high=1.0,
             shape=(self.graph.number_of_nodes() * self.graph.number_of_edges(),),
             dtype=np.float64)

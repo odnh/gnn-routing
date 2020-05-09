@@ -61,6 +61,7 @@ class MaxLinkUtilisation:
 
         edge_utilisation = np.zeros((self.num_nodes, self.num_nodes))
 
+        num_steps = 0
         while True:
             change = np.multiply(split_matrix, node_flow)
             edge_utilisation += change
@@ -69,6 +70,12 @@ class MaxLinkUtilisation:
                 print("is_nan :'(")
             comparison = np.less(np.nan_to_num(change), self.min_delta)
             if np.logical_and.reduce(np.logical_and.reduce(comparison)):
+                break
+            num_steps += 1
+            # if we take more than |E| steps we have cycles which is not good.
+            # Therefore: end here with really bad reward
+            if num_steps > routing.shape[1]:
+                edge_utilisation += np.multiply(change, np.full((self.num_nodes, self.num_nodes), demand*10))
                 break
 
         return edge_utilisation
