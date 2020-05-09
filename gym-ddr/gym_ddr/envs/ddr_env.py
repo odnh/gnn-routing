@@ -61,6 +61,10 @@ class DDREnv(gym.Env):
                    (graph.number_of_nodes() - 1),),
             dtype=np.float64)
 
+        # so that we can make the input routing valid
+        self.out_edge_count = np.cumsum([i[1] for i in
+                               sorted(graph.out_degree(), key=lambda x: x[0])])
+
         self.oblivious_routing = oblivious_routing
 
         self.mlu = MaxLinkUtilisation(graph)
@@ -120,12 +124,23 @@ class DDREnv(gym.Env):
         """
         Subclass to use different actions, assumes action is a fully specified
         routing in base case but also does any necessary unflattening.
-        NB: this should never really be used.
         """
+        num_nodes = self.graph.number_of_nodes()
         num_edges = self.graph.number_of_edges()
         num_demands = self.graph.number_of_nodes() * \
                       (self.graph.number_of_nodes() - 1)
-        return action.reshape((num_demands, num_edges))
+
+        # we are required to make the destination routing valid using softmax
+        # over out_edges from each node
+        softmaxed_routing = np.zeros((num_demands, num_edges))
+        reshaped_action = np.reshape(action, (num_demands, num_edges))
+        for flow_idx in range(num_demands):
+            for intermediate_node in range(num_nodes):
+                start_idx = self.out_edge_count[intermediate_node-1] if intermediate_node-1 >= 0 else 0
+                end_idx = self.out_edge_count[intermediate_node]
+                softmaxed_routing[flow_idx][start_idx:end_idx] = softmax(reshaped_action[flow_idx][start_idx:end_idx])
+
+        return softmaxed_routing
 
     def get_reward(self, routing: Routing) -> float:
         """
@@ -175,19 +190,13 @@ class DDREnvDest(DDREnv):
                  graph: nx.DiGraph, **kwargs):
         super().__init__(dm_sequence, dm_memory_length, graph, **kwargs)
 
-        # For calculating the action space size and routing translation
-        # sorted to match encoding ordering of nodes
-        self.out_edge_count = [i[1] for i in
-                               sorted(graph.out_degree(), key=lambda x: x[0])]
-
         self.action_space = gym.spaces.Box(
             low=1.0,
             high=1.0,
-            shape=(sum(self.out_edge_count) * (graph.number_of_nodes() - 1),),
+            shape=(self.graph.number_of_nodes() * self.graph.number_of_edges(),),
             dtype=np.float64)
 
         # Precompute list of flows for use in routing translation
-        # Ordering is eg 0,1 0,2 0,3 1,0 1,2 1,3 2,0 2,1 2,3
         num_nodes = self.graph.number_of_nodes()
         self.flows = [(i, j) for i in range(num_nodes) for j in range(num_nodes)
                       if i != j]
@@ -205,39 +214,26 @@ class DDREnvDest(DDREnv):
         """
         Converts a destination routing to full routing
         Args:
-            action: flat 1x(|V|*(|V|-1)*out_edges)
+            action: flat 1x(|V|*|E|)
         Returns:
             A fully specified routing (dims 0: flows, 1: edges)
-        NB: this code is currently incorrect. Do not use.
         """
-
+        # first we make the destination routing valid using softmax over
+        # out_edges from each node
         num_edges = self.graph.number_of_edges()
         num_nodes = self.graph.number_of_nodes()
-        softmaxed_routing = []
-        idx = 0
-        for i, count in enumerate(self.out_edge_count):
-            vertex = []
-            for dest in range(num_nodes - 1):
-                dest = []
-                for _ in range(count):
-                    dest.append(action[idx])
-                    idx += 1
-                vertex.append(softmax(dest))
-            softmaxed_routing.append(vertex)
+        softmaxed_routing = np.zeros((num_nodes, num_edges))
+        reshaped_action = np.reshape(action, (num_nodes, num_edges))
+        for flow_dest in range(num_nodes):
+            for intermediate_node in range(num_nodes):
+                start_idx = self.out_edge_count[intermediate_node-1] if intermediate_node-1 >= 0 else 0
+                end_idx = self.out_edge_count[intermediate_node]
+                softmaxed_routing[flow_dest][start_idx:end_idx] = softmax(reshaped_action[flow_dest][start_idx:end_idx])
 
+        # then we assign it identically over all sources
         full_routing = np.zeros((len(self.flows), num_edges), dtype=np.float32)
-
-        for i, (_, dst) in enumerate(self.flows):
-            # Ensure that edges are sorted for correct order in action
-            for j, edge in enumerate(sorted(self.graph.edges())):
-                relative_dst = dst
-                if dst > edge[0]:
-                    relative_dst -= 1
-                if dst == edge[0]:
-                    full_routing[i][j] = 0.0
-                else:
-                    full_routing[i][j] = softmaxed_routing[
-                        edge[0]][relative_dst][self.edge_index[edge]]
+        for flow_idx, (_, dst) in enumerate(self.flows):
+            full_routing[flow_idx] = softmaxed_routing[dst]
 
         return full_routing
 

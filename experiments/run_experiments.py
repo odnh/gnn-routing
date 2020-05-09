@@ -84,7 +84,7 @@ def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
             obs, reward, done, info = vec_env.step(action)
             print(reward)
             print(info)
-            if sum(info['edge_set']) == 0:
+            if sum(info[0]['edge_set']) == 0:
                 reward_inc += 1
                 total_rewards += info[0]['real_reward']
         print("Mean reward: ", total_rewards / reward_inc)
@@ -148,6 +148,8 @@ def env_kwargs_from_args(args: Dict) -> Dict:
     env_kwargs = {}
     if args['memory_length']:
         env_kwargs['dm_memory_length'] = args['memory_length']
+    if args['softmin_gamma']:
+        env_kwargs['gamma'] = args['softmin_gamma']
     return env_kwargs
 
 
@@ -198,6 +200,9 @@ def argparser() -> argparse.ArgumentParser:
                         help="Name for tensorboboard log")
     parser.add_argument('-lstm', action='store_true', dest='lstm',
                         help="Whether to use an lstm layer (default is false)")
+    parser.add_argument('-sg', action='store', dest='softmin_gamma',
+                        type=float, default=2.0,
+                        help="Value of gamma to use for softmin routing")
     return parser
 
 

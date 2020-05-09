@@ -62,6 +62,7 @@ def run_model(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
             action, state = model.predict(obs, state=state, deterministic=True)
             obs, reward, done, info = env.step(action)
             print(reward)
+            print(action)
             print(info)
             total_rewards += reward
         print("Mean reward: ", total_rewards / replay_steps)
@@ -117,6 +118,8 @@ def env_kwargs_from_args(args: Dict) -> Dict:
     env_kwargs = {}
     if args['memory_length']:
         env_kwargs['dm_memory_length'] = args['memory_length']
+    if args['softmin_gamma']:
+        env_kwargs['gamma'] = args['softmin_gamma']
     return env_kwargs
 
 
@@ -171,6 +174,9 @@ def argparser() -> argparse.ArgumentParser:
                         help="Number of steps to take when replaying the env")
     parser.add_argument('-mp', action='store', dest='model_path',
                         help="Path to the stored model to be loaded.")
+    parser.add_argument('-sg', action='store', dest='softmin_gamma',
+                        type=float, default=2.0,
+                        help="Value of gamma to use for softmin routing")
     return parser
 
 
