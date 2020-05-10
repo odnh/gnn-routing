@@ -168,7 +168,10 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     #     unknown dims
     output_edges = tf.reshape(output_graphs[-1].edges,
                               tf.constant([-1, num_edges], np.int32))
+    output_globals = tf.reshape(output_graphs[-1].globals,
+                                tf.constant([-1, 1], np.int32))
     latent_policy_gnn = output_edges
+    latent_policy_gnn = tf.concat([output_edges, output_globals], axis=1)
 
     # build value function network
     latent_vf = vf_builder(vf_arch, network_graph, latent, act_fun,

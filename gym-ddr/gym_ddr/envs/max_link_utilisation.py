@@ -73,9 +73,13 @@ class MaxLinkUtilisation:
                 break
             num_steps += 1
             # if we take more than |E| steps we have cycles which is not good.
-            # Therefore: end here with really bad reward
+            # Therefore: end here with really bad reward, scaled by number of
+            # cycles
+            # TODO: assess if this actually works properly
             if num_steps > routing.shape[1]:
-                edge_utilisation += np.multiply(change, np.full((self.num_nodes, self.num_nodes), demand*10))
+                remaining_flow = np.greater(np.nan_to_num(change), 0.0)
+                edge_utilisation += np.multiply(remaining_flow, np.full(
+                    (self.num_nodes, self.num_nodes), demand))
                 break
 
         return edge_utilisation

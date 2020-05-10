@@ -258,10 +258,11 @@ class DDREnvSoftmin(DDREnv):
                       if i != j]
         self.gamma = gamma
 
+        # plus one is the softmin_gamma
         self.action_space = gym.spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(graph.number_of_edges(),),
+            shape=(graph.number_of_edges()+1,),
             dtype=np.float64)
 
         # Indices of the edges for lookup in routing translation
@@ -279,6 +280,8 @@ class DDREnvSoftmin(DDREnv):
         # TODO: optimise this method. Is too slow
         full_routing = np.zeros((len(self.flows), self.graph.number_of_edges()),
                                 dtype=np.float32)
+        gamma = (action[-1] + 1.0) * 10.0
+        action = action[:-1]
 
         # First we place the routing edge weights on the graph (and rescale
         # between 1 and 0)
@@ -305,7 +308,7 @@ class DDREnvSoftmin(DDREnv):
                         self.graph[out_edge[0]][out_edge[1]]['route_weight'] + \
                         distances[out_edge[1]]
                 # softmin the out_edge weights so that ratios sum to one
-                softmin_weights = self.softmin(out_edge_weights)
+                softmin_weights = self.softmin(gamma, out_edge_weights)
                 # assign to the splitting ratios for this node and flow to
                 # overall routing
                 for out_edge_idx, weight in enumerate(softmin_weights):
@@ -314,7 +317,7 @@ class DDREnvSoftmin(DDREnv):
 
         return full_routing
 
-    def softmin(self, array: np.ndarray) -> np.ndarray:
+    def softmin(self, gamma: float, array: np.ndarray) -> np.ndarray:
         """
         Calculates and returns the softmin of an np array
         Args:
@@ -322,7 +325,7 @@ class DDREnvSoftmin(DDREnv):
         Returns:
             np array the same size but softminned
         """
-        exponentiated = np.exp(np.multiply(array, -self.gamma))
+        exponentiated = np.exp(np.multiply(array, -gamma))
         total = sum(exponentiated)
         return np.divide(exponentiated, total)
 
