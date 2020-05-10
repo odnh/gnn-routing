@@ -41,7 +41,7 @@ def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
                    env_kwargs: Dict = {}, policy_kwargs: Dict = {},
                    hyperparameters: Dict = {}, timesteps: int = 10000,
                    parallelism: int = 4, model_name: str = "",
-                   log_name: str = ""):
+                   log_name: str = "", replay_steps: int = 10):
     oblivious_routing = None  # yates.get_oblivious_routing(graph)
 
     # make env
@@ -76,10 +76,9 @@ def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
     obs = vec_env.reset()
     state = None
     total_rewards = 0
-    replay_steps = 64
     if env_name == 'ddr-iterative-v0':
         reward_inc = 0
-        for i in range(replay_steps):
+        for i in range(replay_steps - 1):
             action, state = model.predict(obs, state=state, deterministic=True)
             obs, reward, done, info = vec_env.step(action)
             print(reward)
@@ -89,23 +88,25 @@ def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
                 total_rewards += info[0]['real_reward']
         print("Mean reward: ", total_rewards / reward_inc)
     else:
-        for i in range(replay_steps):
+        for i in range(replay_steps - 1):
             action, state = model.predict(obs, state=state, deterministic=True)
             obs, reward, done, info = vec_env.step(action)
             print(reward)
             print(info)
             total_rewards += reward[0]
-        print("Mean reward: ", total_rewards / replay_steps)
+        print("Mean reward: ", total_rewards / (replay_steps - 1))
     vec_env.close()
 
 
 def demands_from_args(args: Dict, graph: nx.DiGraph) -> List[
     List[Tuple[np.ndarray, float]]]:
     num_demands = graph.number_of_nodes() * (graph.number_of_nodes() - 1)
+    # because the first n demands are used to build the history
+    sequence_length = args['sequence_length'] + args['memory_length']
     dm_generator_getter = lambda seed: dm.cyclical_sequence(
         # A function that returns a generator for a sequence of demands
         lambda rs_l: dm.bimodal_demand(num_demands, rs_l),
-        args['sequence_length'], args['cycle_length'], args['sparsity'],
+        sequence_length, args['cycle_length'], args['sparsity'],
         seed=seed)
     mlu = MaxLinkUtilisation(graph)
     demand_sequences = map(dm_generator_getter, args['demand_seeds'])
@@ -117,18 +118,22 @@ def demands_from_args(args: Dict, graph: nx.DiGraph) -> List[
 def policy_from_args(args: Dict, graph: nx.DiGraph) -> Tuple[
     ActorCriticPolicy, Dict]:
     dm_memory_length = 1 if args['lstm'] else args['memory_length']
+    iterations = args['gnn_iterations'] if 'gnn_iterations' in args else 10
     if args['policy'] == 'gnn':
         policy = GnnLstmDdrPolicy if args['lstm'] else GnnDdrPolicy
         policy_kwargs = {'network_graph': graph,
                          'dm_memory_length': dm_memory_length,
                          'vf_arch': args['vf_arch'],
+                         'iterations': iterations
                          }
     elif args['policy'] == 'iter':
         policy = GnnLstmDdrIterativePolicy if args[
             'lstm'] else GnnDdrIterativePolicy
         policy_kwargs = {'network_graph': graph,
                          'dm_memory_length': dm_memory_length,
-                         'vf_arch': args['vf_arch']}
+                         'vf_arch': args['vf_arch'],
+                         'iterations': iterations
+                         }
     else:
         policy = MlpLstmDdrPolicy if args['lstm'] else MlpDdrPolicy
         policy_kwargs = {'network_graph': graph}
@@ -203,6 +208,12 @@ def argparser() -> argparse.ArgumentParser:
     parser.add_argument('-sg', action='store', dest='softmin_gamma',
                         type=float, default=2.0,
                         help="Value of gamma to use for softmin routing")
+    parser.add_argument('-rs', action='store', dest='replay_steps',
+                        help="Number of steps to take when replaying the env")
+    parser.add_argument('-mp', action='store', dest='model_path',
+                        help="Path to the stored model to be loaded.")
+    parser.add_argument('-gi', action='store', dest='gnn_iterations',
+                        help="Number of message passing iterations in gnn")
     return parser
 
 
@@ -252,4 +263,5 @@ if __name__ == "__main__":
 
     run_experiment(args['env'], policy, graph, demands, env_kwargs,
                    policy_kwargs, hyperparameters, args['timesteps'],
-                   args['parallelism'], args['log_name'], args['model_name'])
+                   args['parallelism'], args['log_name'], args['model_name'],
+                   args['replay_steps'])
