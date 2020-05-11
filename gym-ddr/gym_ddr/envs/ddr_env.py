@@ -13,6 +13,18 @@ Observation = np.ndarray
 Action = np.ndarray
 
 
+def normalise_array(array: np.ndarray) -> np.ndarray:
+    """
+    Takes an array of positive values and normalises them so they sum to one
+    Args:
+        array: np array
+
+    Returns:
+        normalised np array
+    """
+    return np.divide(array, np.sum(array)) if np.sum(array) != 0 else array
+
+
 class DDREnv(gym.Env):
     """
     Gym env for data driven routing
@@ -132,15 +144,16 @@ class DDREnv(gym.Env):
 
         # we are required to make the destination routing valid using softmax
         # over out_edges from each node
-        softmaxed_routing = np.zeros((num_demands, num_edges))
+        normalised_routing = np.zeros((num_demands, num_edges))
         reshaped_action = np.reshape(action, (num_demands, num_edges))
+        rescaled_action = np.divide(np.add(reshaped_action, 1.0), 2.0)
         for flow_idx in range(num_demands):
             for intermediate_node in range(num_nodes):
                 start_idx = self.out_edge_count[intermediate_node-1] if intermediate_node-1 >= 0 else 0
                 end_idx = self.out_edge_count[intermediate_node]
-                softmaxed_routing[flow_idx][start_idx:end_idx] = softmax(reshaped_action[flow_idx][start_idx:end_idx])
+                normalised_routing[flow_idx][start_idx:end_idx] = normalise_array(rescaled_action[flow_idx][start_idx:end_idx])
 
-        return softmaxed_routing
+        return normalised_routing
 
     def get_reward(self, routing: Routing) -> float:
         """
@@ -222,18 +235,20 @@ class DDREnvDest(DDREnv):
         # out_edges from each node
         num_edges = self.graph.number_of_edges()
         num_nodes = self.graph.number_of_nodes()
-        softmaxed_routing = np.zeros((num_nodes, num_edges))
+        normalised_routing = np.zeros((num_nodes, num_edges))
         reshaped_action = np.reshape(action, (num_nodes, num_edges))
+        # move from [-1,1] to [0, 1]
+        rescaled_action = np.divide(np.add(reshaped_action, 1.0), 2.0)
         for flow_dest in range(num_nodes):
             for intermediate_node in range(num_nodes):
                 start_idx = self.out_edge_count[intermediate_node-1] if intermediate_node-1 >= 0 else 0
                 end_idx = self.out_edge_count[intermediate_node]
-                softmaxed_routing[flow_dest][start_idx:end_idx] = softmax(reshaped_action[flow_dest][start_idx:end_idx])
+                normalised_routing[flow_dest][start_idx:end_idx] = normalise_array(rescaled_action[flow_dest][start_idx:end_idx])
 
         # then we assign it identically over all sources
         full_routing = np.zeros((len(self.flows), num_edges), dtype=np.float32)
         for flow_idx, (_, dst) in enumerate(self.flows):
-            full_routing[flow_idx] = softmaxed_routing[dst]
+            full_routing[flow_idx] = normalised_routing[dst]
 
         return full_routing
 
