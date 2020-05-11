@@ -170,7 +170,6 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
                               tf.constant([-1, num_edges], np.int32))
     output_globals = tf.reshape(output_graphs[-1].globals,
                                 tf.constant([-1, 1], np.int32))
-    latent_policy_gnn = output_edges
     latent_policy_gnn = tf.concat([output_edges, output_globals], axis=1)
 
     # build value function network
@@ -214,7 +213,7 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
                                [-1, (num_nodes - 1) * dm_memory_length],
                                name="node_feat_input")
     # reshape edge features to flat batches but vector in dim 1 per edge
-    edge_features = tf.reshape(edge_features_slice, [-1, 2],
+    edge_features = tf.reshape(edge_features_slice, [-1, 3],
                                name="edge_feat_input")
 
     # initialise global input features to zeros (as are unused)
@@ -246,12 +245,13 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
                               n_edge=n_edge_list)
 
     # Our only output is a single global which is the value to set the edge
-    # We still output other for use in shard part of value function
+    # We still output other for use in shared part of value function
+    # The global output is: [edge_value, gamma_value]
     model = EncodeProcessDecode(edge_output_size=1, node_output_size=1,
-                                global_output_size=1)
+                                global_output_size=2)
     output_graphs = model(input_graph, iterations)
     output_global = tf.reshape(output_graphs[-1].globals,
-                               tf.constant([-1, 1], np.int32))
+                               tf.constant([-1, 2], np.int32))
     latent_policy_gnn = output_global
 
     # build value function network

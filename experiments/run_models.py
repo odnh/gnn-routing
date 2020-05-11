@@ -3,6 +3,7 @@ import os
 from typing import List, Dict, Tuple
 
 import networkx as nx
+from ddr_learning_helpers import routing_baselines
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
@@ -22,7 +23,9 @@ def run_model(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
               env_kwargs: Dict = {}, policy_kwargs: Dict = {},
               hyperparameters: Dict = {},
               parallelism: int = 4):
-    oblivious_routing = None  # yates.get_oblivious_routing(graph)
+    # oblivious_routing = yates.get_oblivious_routing(graph)
+    oblivious_routing = routing_baselines.shortest_path_routing(graph)
+    print(oblivious_routing)
 
     # make env
     env = gym.make(env_name,

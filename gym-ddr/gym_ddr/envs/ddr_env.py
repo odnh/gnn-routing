@@ -3,7 +3,6 @@ from typing import Tuple, List, Dict, Type
 import gym
 import networkx as nx
 import numpy as np
-from scipy.special import softmax
 
 from .max_link_utilisation import MaxLinkUtilisation
 
@@ -75,7 +74,8 @@ class DDREnv(gym.Env):
 
         # so that we can make the input routing valid
         self.out_edge_count = np.cumsum([i[1] for i in
-                               sorted(graph.out_degree(), key=lambda x: x[0])])
+                                         sorted(graph.out_degree(),
+                                                key=lambda x: x[0])])
 
         self.oblivious_routing = oblivious_routing
 
@@ -149,9 +149,12 @@ class DDREnv(gym.Env):
         rescaled_action = np.divide(np.add(reshaped_action, 1.0), 2.0)
         for flow_idx in range(num_demands):
             for intermediate_node in range(num_nodes):
-                start_idx = self.out_edge_count[intermediate_node-1] if intermediate_node-1 >= 0 else 0
+                start_idx = self.out_edge_count[
+                    intermediate_node - 1] if intermediate_node - 1 >= 0 else 0
                 end_idx = self.out_edge_count[intermediate_node]
-                normalised_routing[flow_idx][start_idx:end_idx] = normalise_array(rescaled_action[flow_idx][start_idx:end_idx])
+                normalised_routing[flow_idx][
+                start_idx:end_idx] = normalise_array(
+                    rescaled_action[flow_idx][start_idx:end_idx])
 
         return normalised_routing
 
@@ -206,7 +209,8 @@ class DDREnvDest(DDREnv):
         self.action_space = gym.spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(self.graph.number_of_nodes() * self.graph.number_of_edges(),),
+            shape=(
+            self.graph.number_of_nodes() * self.graph.number_of_edges(),),
             dtype=np.float64)
 
         # Precompute list of flows for use in routing translation
@@ -241,9 +245,12 @@ class DDREnvDest(DDREnv):
         rescaled_action = np.divide(np.add(reshaped_action, 1.0), 2.0)
         for flow_dest in range(num_nodes):
             for intermediate_node in range(num_nodes):
-                start_idx = self.out_edge_count[intermediate_node-1] if intermediate_node-1 >= 0 else 0
+                start_idx = self.out_edge_count[
+                    intermediate_node - 1] if intermediate_node - 1 >= 0 else 0
                 end_idx = self.out_edge_count[intermediate_node]
-                normalised_routing[flow_dest][start_idx:end_idx] = normalise_array(rescaled_action[flow_dest][start_idx:end_idx])
+                normalised_routing[flow_dest][
+                start_idx:end_idx] = normalise_array(
+                    rescaled_action[flow_dest][start_idx:end_idx])
 
         # then we assign it identically over all sources
         full_routing = np.zeros((len(self.flows), num_edges), dtype=np.float32)
@@ -263,28 +270,26 @@ class DDREnvSoftmin(DDREnv):
     def __init__(self,
                  dm_sequence: List[List[Demand]],
                  dm_memory_length: int,
-                 graph: nx.DiGraph,
-                 gamma: float = 2, **kwargs):
+                 graph: nx.DiGraph, **kwargs):
         super().__init__(dm_sequence, dm_memory_length, graph, **kwargs)
 
         # Precompute list of flows for use in routing translation
         num_nodes = self.graph.number_of_nodes()
         self.flows = [(i, j) for i in range(num_nodes) for j in range(num_nodes)
                       if i != j]
-        self.gamma = gamma
 
         # plus one is the softmin_gamma
         self.action_space = gym.spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(graph.number_of_edges()+1,),
+            shape=(graph.number_of_edges() + 1,),
             dtype=np.float64)
 
         # Indices of the edges for lookup in routing translation
         self.edge_index_map = {edge: i for i, edge in
                                enumerate(sorted(self.graph.edges()))}
 
-    def get_routing(self, action: Action) -> Routing:
+    def get_routing_raw(self, action: Action) -> Routing:
         """
         Converts a softmin routing to full routing
         Args:
@@ -292,7 +297,6 @@ class DDREnvSoftmin(DDREnv):
         Returns:
             A fully specified routing (dims 0: flows, 1: edges)
         """
-        # TODO: optimise this method. Is too slow
         full_routing = np.zeros((len(self.flows), self.graph.number_of_edges()),
                                 dtype=np.float32)
         gamma = (action[-1] + 1.0) * 10.0
@@ -332,6 +336,66 @@ class DDREnvSoftmin(DDREnv):
 
         return full_routing
 
+    def get_routing(self, action: Action) -> Routing:
+        """
+        Converts a softmin routing to full routing and prunes cycles with a
+        very basic heuristic
+        Args:
+            action: dims 0: edges
+        Returns:
+            A fully specified routing (dims 0: flows, 1: edges)
+        """
+        full_routing = np.zeros((len(self.flows), self.graph.number_of_edges()),
+                                dtype=np.float32)
+        gamma = (action[-1] + 1.0) * 10.0
+        action = action[:-1]
+
+        # TODO: revisit
+        # First we place the routing edge weights on the graph (and rescale
+        # between 1 and 2 so that no edges have 0 weight which causes pruning
+        # issues when removing cycles)
+        for i, edge in enumerate(sorted(self.graph.edges)):
+            self.graph[edge[0]][edge[1]]['route_weight'] = (
+                    (action[i] + 3.0) / 2.0)
+
+        # then for each flow we calculate the splitting ratios
+        for flow_idx, flow in enumerate(self.flows):
+            # first we get distance to dest values for each node
+            distance_results = nx.single_source_bellman_ford_path_length(
+                self.graph, flow[1], weight='route_weight')
+            distances = np.zeros(self.graph.number_of_nodes(), dtype=np.float)
+
+            # make the distances lookupable
+            for (target, distance) in distance_results.items():
+                distances[target] = distance
+
+            # now we prune edges that take us further from the destination so
+            # that there are no cycles
+            pruned_graph = self.graph.copy()
+            for (src, dst) in self.graph.edges():
+                if distances[dst] >= distances[src]:
+                    pruned_graph.remove_edge(src, dst)
+
+            # then we calculate softmin splitting for the out-edges on each node
+            for node in range(self.graph.number_of_nodes()):
+                out_edges = list(pruned_graph.out_edges(node))
+                out_edge_weights = np.zeros(len(out_edges))
+                # collect the weights to use for deciding splitting ratios
+                # from this node
+                for out_edge_idx, out_edge in enumerate(out_edges):
+                    out_edge_weights[out_edge_idx] = \
+                        pruned_graph[out_edge[0]][out_edge[1]]['route_weight'] + \
+                        distances[out_edge[1]]
+                # softmin the out_edge weights so that ratios sum to one
+                softmin_weights = self.softmin(gamma, out_edge_weights)
+                # assign to the splitting ratios for this node and flow to
+                # overall routing
+                for out_edge_idx, weight in enumerate(softmin_weights):
+                    full_routing[flow_idx][
+                        self.edge_index_map[out_edges[out_edge_idx]]] = weight
+        # print(full_routing)
+        return full_routing
+
     def softmin(self, gamma: float, array: np.ndarray) -> np.ndarray:
         """
         Calculates and returns the softmin of an np array
@@ -359,10 +423,11 @@ class DDREnvIterative(DDREnvSoftmin):
                  **kwargs):
         super().__init__(dm_sequence, dm_memory_length, graph, **kwargs)
 
+        # action space is [edge_value, softmin_gamma]
         self.action_space = gym.spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(1,),
+            shape=(2,),
             dtype=np.float64)
         self.observation_space = gym.spaces.Box(
             low=0.0,
@@ -370,7 +435,7 @@ class DDREnvIterative(DDREnvSoftmin):
             # Space contains per edge to set and already set
             shape=(dm_memory_length * graph.number_of_nodes() *
                    (graph.number_of_nodes() - 1) +
-                   (2 * graph.number_of_edges()),),
+                   (3 * graph.number_of_edges()),),
             dtype=np.float64)
 
         # Extra state to track partial completeness of single routing selection
@@ -384,7 +449,7 @@ class DDREnvIterative(DDREnvSoftmin):
         # array of which edges have had their routing set so far
         self.edge_set = np.zeros(graph.number_of_edges(), dtype=float)
         # current softmin edge values
-        self.edge_values = np.zeros(graph.number_of_edges(), dtype=float)
+        self.edge_values = np.zeros(graph.number_of_edges() + 1, dtype=float)
 
         # save the last reward so in each step we see how much we improved
         self.last_reward = 0
@@ -406,9 +471,9 @@ class DDREnvIterative(DDREnvSoftmin):
 
         # add action to the overall routing
         edge_idx = self.edge_order[self.iter_idx % self.iter_length]
-        # shift from -1->1 to 0->1
-        self.edge_values[edge_idx] = (action[0] + 1.0) / 2.0
+        self.edge_values[edge_idx] = action[0]
         self.edge_set[edge_idx] = 1
+        self.edge_values[-1] = action[-1]  # set the gamma for softmin
 
         routing = self.get_routing(self.edge_values)
 
@@ -425,7 +490,7 @@ class DDREnvIterative(DDREnvSoftmin):
             self.edge_set = np.zeros(self.graph.number_of_edges(), dtype=float)
             # Set to midvalue at start so algorithm can change each edge to be
             # more or less favourable
-            self.edge_values = np.full(self.graph.number_of_edges(),
+            self.edge_values = np.full(self.graph.number_of_edges() + 1,
                                        0.5,
                                        dtype=float)
             self.dm_index += 1
@@ -463,7 +528,8 @@ class DDREnvIterative(DDREnvSoftmin):
         np.random.shuffle(self.edge_order)
         self.iter_idx = 0
         self.edge_set = np.zeros(self.graph.number_of_edges(), dtype=float)
-        self.edge_values = np.zeros(self.graph.number_of_edges(), dtype=float)
+        self.edge_values = np.zeros(self.graph.number_of_edges() + 1,
+                                    dtype=float)
         return self.get_observation()
 
     def get_observation(self) -> Observation:
@@ -472,13 +538,15 @@ class DDREnvIterative(DDREnvSoftmin):
         Returns:
             A flat np array of the demand matrix
         """
+        # TODO: make current edge value part of observation
         target_edge_idx = self.edge_order[self.iter_idx]
         target_edge = np.identity(self.graph.number_of_edges())[
                       target_edge_idx:target_edge_idx + 1]
 
-        iter_info = np.empty((self.graph.number_of_edges() * 2,), dtype=float)
-        iter_info[0::2] = self.edge_set
-        iter_info[1::2] = target_edge
+        iter_info = np.empty((self.graph.number_of_edges() * 3,), dtype=float)
+        iter_info[0::3] = self.edge_set  # TODO: maybe get rid of this?
+        iter_info[1::3] = target_edge
+        iter_info[2::3] = self.edge_values[:1]  # without the gamma
         dm_no_opt_memory = [dm[0] for dm in self.dm_memory]
         return np.concatenate((np.stack(dm_no_opt_memory).ravel(), iter_info))
 
