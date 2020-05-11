@@ -82,10 +82,11 @@ def get_ddr_routing(raw_routing: str, graph: nx.DiGraph) -> np.ndarray:
                     routing[flow_map[current_flow]][edge_map[edge]] += float(
                         value[0])
 
-    # Due to the algorithm having a tendency to add loops into the routing the
-    # loop above has a tendency to set splitting ratios for the out edges of a
-    # node that add up to greater than one. Therefore we now softmax over the
-    # splitting ratios at each node to fix this.
+    # due to the algorithm setting proportions of flow on paths rather than
+    # splitting ratios for each node we have to rescale the ratios on each edge
+    # at each node to add to one
+    # NB: the Raeke algorithms sometimes creates loops in small graphs so this
+    # may lead to underestimates where this is the case
     normalised_routing = np.zeros((len(flows), num_edges), dtype=np.float32)
     for flow_idx in range(len(flows)):
         for node_idx in range(num_nodes):
@@ -93,7 +94,10 @@ def get_ddr_routing(raw_routing: str, graph: nx.DiGraph) -> np.ndarray:
             out_edge_ids = [edge_map[edge] for edge in out_edges]
             out_edge_weights = [routing[flow_idx][edge_idx] for edge_idx in
                                 out_edge_ids]
-            normalised_out_edge_weights = softmax(out_edge_weights)
+            if np.sum(out_edge_weights) != 0.0:
+                normalised_out_edge_weights = np.divide(out_edge_weights, np.sum(out_edge_weights))
+            else:
+                normalised_out_edge_weights = out_edge_weights
             for i, edge_idx in enumerate(out_edge_ids):
                 normalised_routing[flow_idx][edge_idx] = \
                     normalised_out_edge_weights[i]
@@ -120,6 +124,6 @@ def get_oblivious_routing(graph: nx.DiGraph) -> Routing:
     raw_routing = subprocess.run([raeke_path, oblivious_tmp_path],
                                  stdout=subprocess.PIPE).stdout.decode('utf-8')
     ddr_routing = get_ddr_routing(raw_routing, graph)
-    os.remove(oblivious_tmp_path)
+    # os.remove(oblivious_tmp_path)
 
     return ddr_routing
