@@ -151,9 +151,9 @@ def graph_from_args(args: Dict) -> nx.DiGraph:
 
 def env_kwargs_from_args(args: Dict) -> Dict:
     env_kwargs = {}
-    if args['memory_length']:
+    if 'memory_length' in args:
         env_kwargs['dm_memory_length'] = args['memory_length']
-    if args['softmin_gamma']:
+    if 'softmin_gamma' in args:
         env_kwargs['gamma'] = args['softmin_gamma']
     return env_kwargs
 
@@ -205,15 +205,15 @@ def argparser() -> argparse.ArgumentParser:
                         help="Name for tensorboboard log")
     parser.add_argument('-lstm', action='store_true', dest='lstm',
                         help="Whether to use an lstm layer (default is false)")
-    parser.add_argument('-sg', action='store', dest='softmin_gamma',
-                        type=float, default=2.0,
-                        help="Value of gamma to use for softmin routing")
     parser.add_argument('-rs', action='store', dest='replay_steps',
                         help="Number of steps to take when replaying the env")
     parser.add_argument('-mp', action='store', dest='model_path',
                         help="Path to the stored model to be loaded.")
     parser.add_argument('-gi', action='store', dest='gnn_iterations',
                         help="Number of message passing iterations in gnn")
+    parser.add_argument('-sg', action='store', dest='softmin_gamma',
+                        type=float, default=2.0,
+                        help="Value of gamma to use for softmin routing")
     return parser
 
 
