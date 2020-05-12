@@ -41,6 +41,7 @@ def run_model(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
     obs = env.reset()
     state = None
     total_rewards = 0
+    oblivious_rewards = 0
     if env_name == 'ddr-iterative-v0':
         reward_inc = 0
         for i in range(replay_steps-1):
@@ -60,7 +61,9 @@ def run_model(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
             print(action)
             print(info)
             total_rewards += reward
+            oblivious_rewards += info['oblivious_utilisation'] / info['opt_utilisation']
         print("Mean reward: ", total_rewards / (replay_steps-1))
+        print("Mean oblivious reward: ", oblivious_rewards / (replay_steps-1))
     env.close()
 
 
