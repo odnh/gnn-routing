@@ -404,7 +404,9 @@ class DDREnvIterative(DDREnvSoftmin):
         self.edge_values = np.zeros(graph.number_of_edges(), dtype=float)
 
         # save the last reward so in each step we see how much we improved
-        self.last_reward = -2.0
+        self.last_reward = 0.0
+        # save the reward for the entire iteration for logging
+        self.iteration_reward = 0.0
 
     def step(self, action: Type[np.ndarray]) -> Tuple[Observation,
                                                       float,
@@ -444,7 +446,8 @@ class DDREnvIterative(DDREnvSoftmin):
             self.edge_values = np.zeros(self.graph.number_of_edges(), dtype=float)
             self.dm_index += 1
             # TODO: assess is this is correct way and place to reset last reward (and can we improve?)
-            self.last_reward = -2.0
+            self.iteration_reward = self.last_reward  # save the reward for the iteration for debugging
+            self.last_reward = 0.0
             if self.dm_index == len(self.dm_sequence[self.dm_sequence_index]):
                 self.done = True
                 # Move to next dm sequence (randomly)
@@ -480,7 +483,7 @@ class DDREnvIterative(DDREnvSoftmin):
         self.iter_idx = 0
         self.edge_set = np.zeros(self.graph.number_of_edges(), dtype=float)
         self.edge_values = np.zeros(self.graph.number_of_edges(), dtype=float)
-        self.last_reward = -2.0
+        self.last_reward = 0.0
         return self.get_observation()
 
     def get_observation(self) -> Observation:
@@ -515,11 +518,11 @@ class DDREnvIterative(DDREnvSoftmin):
         data_dict.update({'iter_idx': self.iter_idx, 'target_edge': target_edge,
                           'edge_set': self.edge_set,
                           'values': self.edge_values,
-                          'real_reward': self.last_reward})
+                          'real_reward': self.iteration_reward})
         # Extra logging for tensorboard at the end of an episode
         if self.done:
             data_dict.update(
-                {'episode': {'r': self.last_reward,
+                {'episode': {'r': self.iteration_reward,
                              'l': self.dm_index}})
             self.episode_total_reward = 0.0
         return data_dict
