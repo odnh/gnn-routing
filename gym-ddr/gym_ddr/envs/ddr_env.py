@@ -443,6 +443,8 @@ class DDREnvIterative(DDREnvSoftmin):
             # more or less favourable
             self.edge_values = np.zeros(self.graph.number_of_edges(), dtype=float)
             self.dm_index += 1
+            # TODO: assess is this is correct way and place to reset last reward (and can we improve?)
+            self.last_reward = -2.0
             if self.dm_index == len(self.dm_sequence[self.dm_sequence_index]):
                 self.done = True
                 # Move to next dm sequence (randomly)
@@ -478,6 +480,7 @@ class DDREnvIterative(DDREnvSoftmin):
         self.iter_idx = 0
         self.edge_set = np.zeros(self.graph.number_of_edges(), dtype=float)
         self.edge_values = np.zeros(self.graph.number_of_edges(), dtype=float)
+        self.last_reward = -2.0
         return self.get_observation()
 
     def get_observation(self) -> Observation:
