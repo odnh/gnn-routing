@@ -14,25 +14,12 @@ import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 import gym
-import gym_ddr.envs.demand_matrices as dm
-from gym_ddr.envs.max_link_utilisation import MaxLinkUtilisation
 import numpy as np
 from stable_baselines import PPO2
 from stable_baselines.common.vec_env import SubprocVecEnv
 from stable_baselines.common.policies import ActorCriticPolicy
-from stable_baselines_ddr.gnn_policy import MlpDdrPolicy, MlpLstmDdrPolicy, \
-    GnnDdrPolicy, GnnDdrIterativePolicy, GnnLstmDdrPolicy, \
-    GnnLstmDdrIterativePolicy
 
-
-def true_reward_callback(locals_, globals_):
-    self_ = locals_['self']
-    if len(self_.ep_info_buf) != 0:
-        summary = tf.Summary(
-            value=[tf.Summary.Value(tag='real_epmrw',
-                                    simple_value=self_.ep_info_buf[-1]['r'])])
-        locals_['writer'].add_summary(summary, self_.num_timesteps)
-    return True
+from run_experiments import *
 
 
 def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
@@ -94,58 +81,6 @@ def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
             total_rewards += sum(rewards)
     vec_env.close()
     return total_rewards
-
-
-def demands_from_args(args: Dict, graph: nx.DiGraph) -> List[
-    List[Tuple[np.ndarray, float]]]:
-    num_demands = graph.number_of_nodes() * (graph.number_of_nodes() - 1)
-    dm_generator_getter = lambda seed: dm.cyclical_sequence(
-        # A function that returns a generator for a sequence of demands
-        lambda rs_l: dm.bimodal_demand(num_demands, rs_l),
-        args['sequence_length'], args['cycle_length'], args['sparsity'],
-        seed=seed)
-    mlu = MaxLinkUtilisation(graph)
-    demand_sequences = map(dm_generator_getter, args['demand_seeds'])
-    demands_with_opt = [[(demand, mlu.opt(demand)) for demand in sequence] for
-                        sequence in demand_sequences]
-    return demands_with_opt
-
-
-def policy_from_args(args: Dict, graph: nx.DiGraph) -> Tuple[
-    ActorCriticPolicy, Dict]:
-    dm_memory_length = 1 if args['lstm'] else args['memory_length']
-    if args['policy'] == 'gnn':
-        policy = GnnLstmDdrPolicy if args['lstm'] else GnnDdrPolicy
-        policy_kwargs = {'network_graph': graph,
-                         'dm_memory_length': dm_memory_length,
-                         'vf_arch': args['vf_arch'],
-                         }
-    elif args['policy'] == 'iter':
-        policy = GnnLstmDdrIterativePolicy if args[
-            'lstm'] else GnnDdrIterativePolicy
-        policy_kwargs = {'network_graph': graph,
-                         'dm_memory_length': dm_memory_length,
-                         'vf_arch': args['vf_arch']}
-    else:
-        policy = MlpLstmDdrPolicy if args['lstm'] else MlpDdrPolicy
-        policy_kwargs = {'network_graph': graph}
-
-    return policy, policy_kwargs
-
-
-def graph_from_args(args: Dict) -> nx.DiGraph:
-    if args['graph']:
-        graph = graphs.topologyzoo(args['graph'], 10000)
-    else:
-        graph = graphs.basic()
-    return graph
-
-
-def env_kwargs_from_args(args: Dict) -> Dict:
-    env_kwargs = {}
-    if args['memory_length']:
-        env_kwargs['dm_memory_length'] = args['memory_length']
-    return env_kwargs
 
 
 def run_tuning(hyperparameters: Dict, config_path: str):
