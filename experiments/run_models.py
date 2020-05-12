@@ -52,7 +52,9 @@ def run_model(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
             if sum(info['edge_set']) == 0:
                 reward_inc += 1
                 total_rewards += info['real_reward']
+                oblivious_rewards += info['oblivious_utilisation'] / info['opt_utilisation']
         print("Mean reward: ", total_rewards / reward_inc)
+        print("Mean oblivious reward: ", oblivious_rewards / reward_inc)
     else:
         for i in range(replay_steps-1):
             action, state = model.predict(obs, state=state, deterministic=True)

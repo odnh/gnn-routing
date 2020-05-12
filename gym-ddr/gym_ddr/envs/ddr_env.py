@@ -404,7 +404,7 @@ class DDREnvIterative(DDREnvSoftmin):
         self.edge_values = np.zeros(graph.number_of_edges(), dtype=float)
 
         # save the last reward so in each step we see how much we improved
-        self.last_reward = 0
+        self.last_reward = -2.0
 
     def step(self, action: Type[np.ndarray]) -> Tuple[Observation,
                                                       float,
