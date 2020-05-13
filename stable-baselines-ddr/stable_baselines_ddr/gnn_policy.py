@@ -78,10 +78,7 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
                                      tf.constant([-1, num_nodes], np.int32))
         output_globals_vf = tf.reshape(shared_graphs[-1].globals,
                                        tf.constant([-1, 1], np.int32))
-        latent_vf = act_fun(
-            linear(
-                tf.concat([output_edges_vf, output_nodes_vf, output_globals_vf],
-                          1), "vf_fc0", 128, init_scale=np.sqrt(2)))
+        latent_vf = tf.concat([output_edges_vf, output_nodes_vf, output_globals_vf], 1)
     elif vf_arch == "graph":
         model_vf = EncodeProcessDecode(edge_output_size=1, node_output_size=1)
         output_graphs_vf = model_vf(input_graph, iterations)
@@ -89,9 +86,7 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
                                      tf.constant([-1, num_edges], np.int32))
         output_nodes_vf = tf.reshape(output_graphs_vf[-1].nodes,
                                      tf.constant([-1, num_nodes], np.int32))
-        latent_vf = act_fun(
-            linear(tf.concat([output_edges_vf, output_nodes_vf], 1), "vf_fc0",
-                   128, init_scale=np.sqrt(2)))
+        latent_vf = tf.concat([output_edges_vf, output_nodes_vf], 1)
     elif vf_arch == "mlp":
         latent_vf = latent
         latent_vf = act_fun(
@@ -128,7 +123,7 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     num_batches = tf.shape(latent)[0]
 
     # slice the data dimension to split the edge and node features
-    node_features = tf.reshape(latent, [-1, (num_nodes - 1) * dm_memory_length],
+    node_features = tf.reshape(latent, [-1, 2 * dm_memory_length],
                                name="node_feat_input")
 
     # initialise unused input features to all zeros
@@ -168,7 +163,9 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     #     unknown dims
     output_edges = tf.reshape(output_graphs[-1].edges,
                               tf.constant([-1, num_edges], np.int32))
-    latent_policy_gnn = output_edges
+    output_globals = tf.reshape(output_graphs[-1].globals,
+                                tf.constant([-1, 1], np.int32))
+    latent_policy_gnn = tf.concat([output_edges, output_globals], axis=1)
 
     # build value function network
     latent_vf = vf_builder(vf_arch, network_graph, latent, act_fun,
@@ -202,13 +199,13 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
 
     # slice the data dimension to split the edge and node features
     node_features_slice = tf.slice(latent, [0, 0], [-1, num_nodes * (
-            num_nodes - 1) * dm_memory_length])
+            2) * dm_memory_length])
     edge_features_slice = tf.slice(latent, [0, num_nodes * (
-            num_nodes - 1) * dm_memory_length], [-1, -1])
+            2) * dm_memory_length], [-1, -1])
 
     # reshape node features to flat batches but still vector in dim 1 per node
     node_features = tf.reshape(node_features_slice,
-                               [-1, (num_nodes - 1) * dm_memory_length],
+                               [-1, 2 * dm_memory_length],
                                name="node_feat_input")
     # reshape edge features to flat batches but vector in dim 1 per edge
     edge_features = tf.reshape(edge_features_slice, [-1, 3],
@@ -246,10 +243,10 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     # We still output other for use in shared part of value function
     # The global output is: [edge_value, gamma_value]
     model = EncodeProcessDecode(edge_output_size=1, node_output_size=1,
-                                global_output_size=1)
+                                global_output_size=2)
     output_graphs = model(input_graph, iterations)
     output_global = tf.reshape(output_graphs[-1].globals,
-                               tf.constant([-1, 1], np.int32))
+                               tf.constant([-1, 2], np.int32))
     latent_policy_gnn = output_global
 
     # build value function network
@@ -391,8 +388,23 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
             self._proba_distribution, self._policy, self.q_value = \
                 self.pdtype.proba_distribution_from_latent(pi_latent, vf_latent,
                                                            init_scale=0.01)
+            # TODO: get this working (whole change of output space size thing)
+                # self.proba_distribution_no_pi_linear(pi_latent, vf_latent,
+                #                                      init_scale=0.01)
 
         self._setup_init()
+
+    def proba_distribution_no_pi_linear(self, pi_latent_vector, vf_latent_vector, init_scale=0.01, init_bias=0.0):
+        """
+        Modification of the standard function without a linear layer on pi so
+        that size of action space of trained model can be varied
+        """
+        # mean = linear(pi_latent_vector, 'pi', self.size, init_scale=init_scale, init_bias=init_bias)
+        mean = pi_latent_vector  # need this one to be able to vary to change graph size
+        logstd = tf.get_variable(name='pi/logstd', shape=[1, self.pdtype.size], initializer=tf.zeros_initializer())
+        pdparam = tf.concat([mean, mean * 0.0 + logstd], axis=1)
+        q_values = linear(vf_latent_vector, 'q', self.pdtype.size, init_scale=init_scale, init_bias=init_bias)
+        return self.pdtype.proba_distribution_from_flat(pdparam), mean, q_values
 
     def step(self, obs, state=None, mask=None, deterministic=False):
         if deterministic:
