@@ -21,7 +21,7 @@ import numpy as np
 from stable_baselines import PPO2
 from stable_baselines.common.vec_env import SubprocVecEnv
 from stable_baselines.common.policies import ActorCriticPolicy
-from stable_baselines_ddr.gnn_policy import MlpDdrPolicy, MlpLstmDdrPolicy, \
+from stable_baselines_ddr.policies import MlpDdrPolicy, MlpLstmDdrPolicy, \
     GnnDdrPolicy, GnnDdrIterativePolicy, GnnLstmDdrPolicy, \
     GnnLstmDdrIterativePolicy
 
