@@ -287,13 +287,13 @@ class DDREnvSoftmin(DDREnv):
         num_nodes = self.graph.number_of_nodes()
         self.flows = [(i, j) for i in range(num_nodes) for j in range(num_nodes)
                       if i != j]
-        self.gamma = gamma
+        self.gamma_fixed = gamma
 
         # plus one is the softmin_gamma
         self.action_space = gym.spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(graph.number_of_edges(),),
+            shape=(graph.number_of_edges() + 1,),
             dtype=np.float64)
 
         # Indices of the edges for lookup in routing translation
@@ -323,7 +323,7 @@ class DDREnvSoftmin(DDREnv):
         # TODO: revisit
         # rescale softmin gamma from action range [-1, 1] to [0, e^2]
         # is not linear because action of gamma is not linear
-        gamma = np.exp(action[-1] + 1.0) - 1.0
+        gamma = np.exp((action[-1] + 1.0)*1.5) - 1.0
 
         # then for each flow we calculate the splitting ratios
         for flow_idx, flow in enumerate(self.flows):
@@ -394,7 +394,7 @@ class DDREnvIterative(DDREnvSoftmin):
         self.action_space = gym.spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(1,),
+            shape=(2,),
             dtype=np.float64)
         self.observation_space = gym.spaces.Box(
             low=0.0,
@@ -416,6 +416,8 @@ class DDREnvIterative(DDREnvSoftmin):
         self.edge_set = np.zeros(graph.number_of_edges(), dtype=float)
         # current softmin edge values
         self.edge_values = np.zeros(graph.number_of_edges(), dtype=float)
+        # current softmin gamma. Should be [-1, 1]
+        self.gamma = 0.0
 
         # save the last reward so in each step we see how much we improved
         self.last_reward = 0.0
@@ -440,9 +442,10 @@ class DDREnvIterative(DDREnvSoftmin):
         # add action to the overall routing
         edge_idx = self.edge_order[self.iter_idx % self.iter_length]
         self.edge_values[edge_idx] = action[0]
+        self.gamma = action[-1]
         self.edge_set[edge_idx] = 1
 
-        routing = self.get_routing(self.edge_values)
+        routing = self.get_routing(self.edge_values + [self.gamma])
 
         # calculate and save reward
         reward = self.get_reward(routing)
@@ -460,6 +463,7 @@ class DDREnvIterative(DDREnvSoftmin):
             # Set to midvalue at start so algorithm can change each edge to be
             # more or less favourable
             self.edge_values = np.zeros(self.graph.number_of_edges(), dtype=float)
+            self.gamma = 0.0
             # move forwards to next dm in this sequence
             self.dm_index += 1
             self.iteration_reward = self.last_reward  # save the reward for the iteration for debugging
@@ -504,6 +508,7 @@ class DDREnvIterative(DDREnvSoftmin):
         self.edge_set = np.zeros(self.graph.number_of_edges(), dtype=float)
         # intial edge values are midvalues of the action space
         self.edge_values = np.zeros(self.graph.number_of_edges(), dtype=float)
+        self.gamma = 0.0
         # initialise reward to that given by initial edge values routing
         routing = self.get_routing(self.edge_values)
         self.last_reward = self.get_reward(routing)
@@ -519,10 +524,11 @@ class DDREnvIterative(DDREnvSoftmin):
         target_edge = np.identity(self.graph.number_of_edges())[
                       target_edge_idx:target_edge_idx + 1]
 
-        iter_info = np.empty((self.graph.number_of_edges() * 3,), dtype=float)
+        iter_info = np.empty((self.graph.number_of_edges() * 3 + 1,), dtype=float)
         iter_info[0::3] = self.edge_set  # TODO: maybe get rid of this?
         iter_info[1::3] = target_edge
         iter_info[2::3] = self.edge_values  # TODO: maybe don't do this as these are unscaled
+        iter_info[-1]   = self.gamma
         demands_history = DDREnv.get_observation(self)
         return np.concatenate((demands_history, iter_info))
 
@@ -540,6 +546,7 @@ class DDREnvIterative(DDREnvSoftmin):
         data_dict.update({'iter_idx': self.iter_idx, 'target_edge': target_edge,
                           'edge_set': self.edge_set,
                           'values': self.edge_values,
+                          'gamma': self.gamma,
                           'real_reward': self.iteration_reward})
         # Extra logging for tensorboard at the end of an episode
         if self.done:

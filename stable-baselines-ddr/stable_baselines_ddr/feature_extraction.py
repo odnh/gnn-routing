@@ -6,7 +6,7 @@ import tensorflow as tf
 from graph_nets.graphs import GraphsTuple
 from stable_baselines.a2c.utils import linear
 from stable_baselines_ddr.tensor_transformations import repeat_inner_dim, repeat_outer_dim
-from stable_baselines_ddr.graph_nets import EncodeProcessDecode
+from stable_baselines_ddr.graph_nets import DDRGraphNetwork
 
 
 def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
@@ -39,11 +39,11 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
         latent_vf = tf.concat(
             [output_edges_vf, output_nodes_vf, output_globals_vf], 1)
     elif vf_arch == "graph":
-        model_vf = EncodeProcessDecode(edge_output_size=1, node_output_size=1)
-        output_graphs_vf = model_vf(input_graph, iterations)
-        output_edges_vf = tf.reshape(output_graphs_vf[-1].edges,
+        model_vf = DDRGraphNetwork(edge_output_size=1, node_output_size=1)
+        output_graph_vf = model_vf(input_graph, iterations)
+        output_edges_vf = tf.reshape(output_graph_vf.edges,
                                      tf.constant([-1, num_edges], np.int32))
-        output_nodes_vf = tf.reshape(output_graphs_vf[-1].nodes,
+        output_nodes_vf = tf.reshape(output_graph_vf.nodes,
                                      tf.constant([-1, num_nodes], np.int32))
         latent_vf = tf.concat([output_edges_vf, output_nodes_vf], 1)
     elif vf_arch == "mlp":
@@ -115,20 +115,21 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
                               n_node=n_node_list,
                               n_edge=n_edge_list)
 
-    model = EncodeProcessDecode(edge_output_size=1, node_output_size=1,
+    model = DDRGraphNetwork(edge_output_size=1, node_output_size=1,
                                 global_output_size=1)
-    output_graphs = model(input_graph, iterations)
+    output_graph = model(input_graph, iterations)
     # NB: reshape needs num_edges as otherwise output tensor has too many
     #     unknown dims
-    output_edges = tf.reshape(output_graphs[-1].edges,
+    output_edges = tf.reshape(output_graph.edges,
                               tf.constant([-1, num_edges], np.int32))
-    output_globals = tf.reshape(output_graphs[-1].globals,
+    # global output is softmin gamma
+    output_globals = tf.reshape(output_graph.globals,
                                 tf.constant([-1, 1], np.int32))
     latent_policy_gnn = tf.concat([output_edges, output_globals], axis=1)
 
     # build value function network
     latent_vf = vf_builder(vf_arch, network_graph, latent, act_fun,
-                           output_graphs, input_graph, iterations)
+                           output_graph, input_graph, iterations)
 
     return latent_policy_gnn, latent_vf
 
@@ -201,7 +202,7 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     # Our only output is a single global which is the value to set the edge
     # We still output other for use in shared part of value function
     # The global output is: [edge_value, gamma_value]
-    model = EncodeProcessDecode(edge_output_size=1, node_output_size=1,
+    model = DDRGraphNetwork(edge_output_size=1, node_output_size=1,
                                 global_output_size=2)
     output_graphs = model(input_graph, iterations)
     output_global = tf.reshape(output_graphs[-1].globals,
@@ -218,7 +219,7 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
 def custom_lstm(input_tensor, mask_tensor, cell_state_hidden, scope, n_hidden,
                 init_scale=1.0, layer_norm=False):
     """
-    Creates an Long Short Term Memory (LSTM) cell for TensorFlow to be used forr DDR
+    Creates an Long Short Term Memory (LSTM) cell for TensorFlow to be used for DDR
 
     :param input_tensor: (TensorFlow Tensor) The input tensor for the LSTM cell
     :param mask_tensor: (TensorFlow Tensor) The mask tensor for the LSTM cell
