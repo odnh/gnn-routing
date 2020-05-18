@@ -162,9 +162,8 @@ class DDRGraphNetwork(snt.AbstractModule):
     def _build(self, input_op, num_processing_steps):
         latent = self._encoder(input_op)
         latent0 = latent
-        decoded_op = self._decoder(latent)
         for _ in range(num_processing_steps):
             core_input = utils_tf.concat([latent0, latent], axis=1)
             latent = self._core(core_input)
-            decoded_op = self._decoder(latent)
-        return decoded_op
+        decoded_op = self._decoder(latent)
+        return self._output_transform(decoded_op)

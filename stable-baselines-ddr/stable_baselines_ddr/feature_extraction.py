@@ -5,12 +5,13 @@ import networkx as nx
 import tensorflow as tf
 from graph_nets.graphs import GraphsTuple
 from stable_baselines.a2c.utils import linear
+from stable_baselines.common.tf_layers import ortho_init, _ln
 from stable_baselines_ddr.tensor_transformations import repeat_inner_dim, repeat_outer_dim
 from stable_baselines_ddr.graph_nets import DDRGraphNetwork
 
 
 def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
-               act_fun: tf.function, shared_graphs: List[GraphsTuple] = None,
+               act_fun: tf.function, shared_graph: GraphsTuple = None,
                input_graph: GraphsTuple = None,
                iterations: int = 10) -> tf.Tensor:
     """
@@ -20,7 +21,7 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
         graph: the graph this is being built for
         latent: the observation input
         act_fun: activation function
-        shared_graphs: the gnn output from the policy
+        shared_graph: the gnn output from the policy
         input_graph: GraphTuple before any processing
         iterations: number of iterations of message passing
     Returns:
@@ -30,22 +31,28 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
     num_nodes = graph.number_of_nodes()
 
     if vf_arch == "shared":
-        output_edges_vf = tf.reshape(shared_graphs[-1].edges,
+        output_edges_vf = tf.reshape(shared_graph.edges,
                                      tf.constant([-1, num_edges], np.int32))
-        output_nodes_vf = tf.reshape(shared_graphs[-1].nodes,
+        output_nodes_vf = tf.reshape(shared_graph.nodes,
                                      tf.constant([-1, num_nodes], np.int32))
-        output_globals_vf = tf.reshape(shared_graphs[-1].globals,
+        output_globals_vf = tf.reshape(shared_graph.globals,
                                        tf.constant([-1, 1], np.int32))
         latent_vf = tf.concat(
             [output_edges_vf, output_nodes_vf, output_globals_vf], 1)
+        latent_vf = act_fun(
+            linear(latent_vf, "vf_fc0", 128, init_scale=np.sqrt(2)))
+        latent_vf = act_fun(
+            linear(latent_vf, "vf_fc1", 128, init_scale=np.sqrt(2)))
     elif vf_arch == "graph":
-        model_vf = DDRGraphNetwork(edge_output_size=1, node_output_size=1)
+        model_vf = DDRGraphNetwork(edge_output_size=10, node_output_size=10, global_output_size=10)
         output_graph_vf = model_vf(input_graph, iterations)
         output_edges_vf = tf.reshape(output_graph_vf.edges,
                                      tf.constant([-1, num_edges], np.int32))
         output_nodes_vf = tf.reshape(output_graph_vf.nodes,
                                      tf.constant([-1, num_nodes], np.int32))
-        latent_vf = tf.concat([output_edges_vf, output_nodes_vf], 1)
+        output_globals_vf = tf.reshape(output_graph_vf.globals,
+                                       tf.constant([-1, 1], np.int32))
+        latent_vf = tf.concat([output_edges_vf, output_nodes_vf, output_globals_vf], 1)
     elif vf_arch == "mlp":
         latent_vf = latent
         latent_vf = act_fun(

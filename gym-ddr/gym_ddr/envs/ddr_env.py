@@ -189,7 +189,7 @@ class DDREnv(gym.Env):
                 node_demands[(dst * 2) + 1] += dm[0][flow_idx]
             node_demands_memory.append(node_demands)
         raw_observation = np.stack(node_demands_memory).ravel()
-        # normalise observation into [0,1] to play nice TODO: remove, don't think it helped...
+        # normalise observation into [0,1] to play nice
         return normalise_array(raw_observation)
 
     def get_data_dict(self) -> Dict:
