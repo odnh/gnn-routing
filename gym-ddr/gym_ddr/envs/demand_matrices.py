@@ -76,7 +76,7 @@ def bimodal_demand(
             demand[i] = random_state.normal(150, 20)
         else:
             # Elephant flow
-            demand[i] = random_state.normal(400, 20)
+            demand[i] = random_state.normal(800, 20)
     return demand
 
 

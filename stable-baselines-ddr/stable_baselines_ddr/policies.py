@@ -80,11 +80,10 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
 
     def proba_distribution_no_pi_linear(self, pi_latent_vector, vf_latent_vector, init_scale=0.01, init_bias=0.0):
         """
-        Modification of the standard function without a linear layer on pi so
-        that size of action space of trained model can be varied
+        Remove extra linear for debugging purposes
         """
         # mean = linear(pi_latent_vector, 'pi', self.size, init_scale=init_scale, init_bias=init_bias)
-        mean = pi_latent_vector  # need this one to be able to vary to change graph size
+        mean = pi_latent_vector
         logstd = tf.get_variable(name='pi/logstd', shape=[1, self.pdtype.size], initializer=tf.zeros_initializer())
         pdparam = tf.concat([mean, mean * 0.0 + logstd], axis=1)
         q_values = linear(vf_latent_vector, 'q', self.pdtype.size, init_scale=init_scale, init_bias=init_bias)

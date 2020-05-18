@@ -16,7 +16,7 @@ EPSILON = 1e-5
 
 def normalise_array(array: np.ndarray) -> np.ndarray:
     """
-    Takes an array of positive values and normalises them so they sum to one
+    Takes an array of positive values and normalises between 1 and 0
     Args:
         array: np array
 
@@ -188,7 +188,9 @@ class DDREnv(gym.Env):
                 node_demands[src * 2] += dm[0][flow_idx]
                 node_demands[(dst * 2) + 1] += dm[0][flow_idx]
             node_demands_memory.append(node_demands)
-        return np.stack(node_demands_memory).ravel()
+        raw_observation = np.stack(node_demands_memory).ravel()
+        # normalise observation into [0,1] to play nice TODO: remove, don't think it helped...
+        return normalise_array(raw_observation)
 
     def get_data_dict(self) -> Dict:
         """

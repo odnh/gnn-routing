@@ -204,14 +204,14 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     # The global output is: [edge_value, gamma_value]
     model = DDRGraphNetwork(edge_output_size=1, node_output_size=1,
                                 global_output_size=2)
-    output_graphs = model(input_graph, iterations)
-    output_global = tf.reshape(output_graphs[-1].globals,
+    output_graph = model(input_graph, iterations)
+    output_global = tf.reshape(output_graph.globals,
                                tf.constant([-1, 2], np.int32))
     latent_policy_gnn = output_global
 
     # build value function network
     latent_vf = vf_builder(vf_arch, network_graph, latent, act_fun,
-                           output_graphs, input_graph, iterations)
+                           output_graph, input_graph, iterations)
 
     return latent_policy_gnn, latent_vf
 
