@@ -51,7 +51,7 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
         output_nodes_vf = tf.reshape(output_graph_vf.nodes,
                                      tf.constant([-1, num_nodes], np.int32))
         output_globals_vf = tf.reshape(output_graph_vf.globals,
-                                       tf.constant([-1, 1], np.int32))
+                                       tf.constant([-1, 10], np.int32))
         latent_vf = tf.concat([output_edges_vf, output_nodes_vf, output_globals_vf], 1)
     elif vf_arch == "mlp":
         latent_vf = latent
