@@ -108,7 +108,7 @@ class DDREnv(gym.Env):
         self.dm_index += 1
         if self.dm_index == len(self.dm_sequence[self.dm_sequence_index]):
             self.done = True
-            reward = 0.0
+            reward = 0.0  # TODO: maybe need more sensible reward when set done
             data_dict = {}
         else:
             new_dm = self.dm_sequence[self.dm_sequence_index][self.dm_index]
@@ -125,11 +125,14 @@ class DDREnv(gym.Env):
         self.dm_sequence_index = np.random.randint(0, len(self.dm_sequence))
         # tne place us at the start of that sequence
         self.dm_index = 0
-        # pre-fill the memory from the sequence
+        # pre-fill the memory from the sequence (backwards to queue works
+        # properly)
         self.dm_memory = [self.dm_sequence[self.dm_sequence_index][i] for i in
-                          range(self.dm_memory_length)]
-        # move the index to the first element after the memory
-        self.dm_index += self.dm_memory_length
+                          range(self.dm_memory_length-1, -1, -1)]
+        # move the index to the first element after the last element of memory
+        # (this is rather than the next as is incremented at the start of each
+        # step
+        self.dm_index = self.dm_memory_length
         self.done = False
         return self.get_observation()
 
@@ -183,14 +186,17 @@ class DDREnv(gym.Env):
         """
         node_demands_memory = []
         for dm in self.dm_memory:
-            node_demands = np.zeros(self.graph.number_of_nodes() * 2, dtype=float)
+            node_demands = np.zeros(self.graph.number_of_nodes() * 2,
+                                    dtype=float)
             for flow_idx, (src, dst) in enumerate(self.flows):
                 node_demands[src * 2] += dm[0][flow_idx]
                 node_demands[(dst * 2) + 1] += dm[0][flow_idx]
             node_demands_memory.append(node_demands)
-        raw_observation = np.stack(node_demands_memory).ravel()
-        # normalise observation into [0,1] to play nice
-        return normalise_array(raw_observation)
+        # normalise observation into [0,1]
+        normalised_node_demands_memory = [normalise_array(node_demands) for
+                                          node_demands in node_demands_memory]
+        observation = np.stack(normalised_node_demands_memory).ravel()
+        return observation
 
     def get_data_dict(self) -> Dict:
         """
@@ -226,7 +232,7 @@ class DDREnvDest(DDREnv):
             low=-1.0,
             high=1.0,
             shape=(
-            self.graph.number_of_nodes() * self.graph.number_of_edges(),),
+                self.graph.number_of_nodes() * self.graph.number_of_edges(),),
             dtype=np.float64)
 
         # Indices of the edges for lookup in routing translation
@@ -320,12 +326,13 @@ class DDREnvSoftmin(DDREnv):
         # causes pruning issues when removing cycles)
         for i, edge in enumerate(sorted(self.graph.edges)):
             self.graph[edge[0]][edge[1]]['route_weight'] = (
-                    (action[i] + 1.0) / 2.0) + EPSILON
+                                                                   (action[
+                                                                        i] + 1.0) / 2.0) + EPSILON
 
         # TODO: revisit
         # rescale softmin gamma from action range [-1, 1] to [0, e^2]
         # is not linear because action of gamma is not linear
-        gamma = np.exp((action[-1] + 1.0)*1.5) - 1.0
+        gamma = np.exp((action[-1] + 1.0) * 1.5) - 1.0
 
         # then for each flow we calculate the splitting ratios
         for flow_idx, flow in enumerate(self.flows):
@@ -464,7 +471,8 @@ class DDREnvIterative(DDREnvSoftmin):
             np.random.shuffle(self.edge_order)
             # Set to midvalue at start so algorithm can change each edge to be
             # more or less favourable
-            self.edge_values = np.zeros(self.graph.number_of_edges(), dtype=float)
+            self.edge_values = np.zeros(self.graph.number_of_edges(),
+                                        dtype=float)
             self.gamma = 0.0
             # move forwards to next dm in this sequence
             self.dm_index += 1
@@ -495,7 +503,7 @@ class DDREnvIterative(DDREnvSoftmin):
         self.dm_index = 0
         # pre-fill the memory from the sequence
         self.dm_memory = [self.dm_sequence[self.dm_sequence_index][i] for i in
-                          range(self.dm_memory_length)]
+                          range(self.dm_memory_length-1, -1, -1)]
         # move the index to the first element after the memory
         self.dm_index += self.dm_memory_length
         self.done = False
@@ -526,11 +534,12 @@ class DDREnvIterative(DDREnvSoftmin):
         target_edge = np.identity(self.graph.number_of_edges())[
                       target_edge_idx:target_edge_idx + 1]
 
-        iter_info = np.empty((self.graph.number_of_edges() * 3 + 1,), dtype=float)
+        iter_info = np.empty((self.graph.number_of_edges() * 3 + 1,),
+                             dtype=float)
         iter_info[0::3] = self.edge_set  # TODO: maybe get rid of this?
         iter_info[1::3] = target_edge
         iter_info[2::3] = self.edge_values  # TODO: maybe don't do this as these are unscaled
-        iter_info[-1]   = self.gamma
+        iter_info[-1] = self.gamma
         demands_history = DDREnv.get_observation(self)
         return np.concatenate((demands_history, iter_info))
 
