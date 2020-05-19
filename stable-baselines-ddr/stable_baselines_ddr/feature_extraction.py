@@ -43,7 +43,7 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
             linear(latent_vf, "vf_fc0", 128, init_scale=np.sqrt(2)))
         latent_vf = act_fun(
             linear(latent_vf, "vf_fc1", 128, init_scale=np.sqrt(2)))
-    if vf_arch == "shared_iter":
+    elif vf_arch == "shared_iter":
         output_edges_vf = tf.reshape(shared_graph.edges,
                                      tf.constant([-1, num_edges], np.int32))
         output_nodes_vf = tf.reshape(shared_graph.nodes,
@@ -178,10 +178,8 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     num_batches = tf.shape(latent)[0]
 
     # slice the data dimension to split the edge and node features
-    node_features_slice = tf.slice(latent, [0, 0], [-1, num_nodes * (
-        2) * dm_memory_length])
-    edge_features_slice = tf.slice(latent, [0, num_nodes * (
-        2) * dm_memory_length], [-1, -1])
+    node_features_slice = tf.slice(latent, [0, 0], [-1, num_nodes * 2 * dm_memory_length])
+    edge_features_slice = tf.slice(latent, [0, num_nodes * 2 * dm_memory_length], [-1, -1])
 
     # reshape node features to flat batches but still vector in dim 1 per node
     node_features = tf.reshape(node_features_slice,
