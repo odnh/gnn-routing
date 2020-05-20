@@ -1,4 +1,5 @@
-from typing import Tuple, List, Dict, Type
+import collections
+from typing import Tuple, List, Dict, Type, Set
 
 import gym
 import networkx as nx
@@ -334,21 +335,33 @@ class DDREnvSoftmin(DDREnv):
 
         # then for each flow we calculate the splitting ratios
         for flow_idx, flow in enumerate(self.flows):
-            # first we get distance to dest values for each node
+            # # first we get distance to dest values for each node
+            # distance_results = nx.single_source_bellman_ford_path_length(
+            #     self.graph, flow[1], weight='route_weight')
+            # distances = np.zeros(self.graph.number_of_nodes(), dtype=np.float)
+
+            # # make the distances lookupable by node
+            # for (target, distance) in distance_results.items():
+            #     distances[target] = distance
+
+            # now we prune edges that take us further from the destination so
+            # that there are no cycles
+            # pruned_graph = self.graph.copy()
+            # for (src, dst) in self.graph.edges():
+            #     if distances[dst] >= distances[src]:
+            #         pruned_graph.remove_edge(src, dst)
+
+            # first we prune the graph down to a DAG
+            pruned_graph = self.prune_graph(self.graph, flow)
+
+            # then we get distance to dest values for each node
             distance_results = nx.single_source_bellman_ford_path_length(
-                self.graph, flow[1], weight='route_weight')
-            distances = np.zeros(self.graph.number_of_nodes(), dtype=np.float)
+                pruned_graph, flow[1], weight='route_weight')
+            distances = np.zeros(pruned_graph.number_of_nodes(), dtype=np.float)
 
             # make the distances lookupable by node
             for (target, distance) in distance_results.items():
                 distances[target] = distance
-
-            # now we prune edges that take us further from the destination so
-            # that there are no cycles
-            pruned_graph = self.graph.copy()
-            for (src, dst) in self.graph.edges():
-                if distances[dst] >= distances[src]:
-                    pruned_graph.remove_edge(src, dst)
 
             # then we calculate softmin splitting for the out-edges on each node
             for node in range(self.graph.number_of_nodes()):
@@ -368,6 +381,154 @@ class DDREnvSoftmin(DDREnv):
                     full_routing[flow_idx][
                         self.edge_index_map[out_edges[out_edge_idx]]] = weight
         return full_routing
+
+    def prune_graph(self, graph: nx.DiGraph, flow: Tuple[int, int]) -> nx.DiGraph:
+        """
+        Makes the graph a DAG, retaining as many paths as possible (although not
+        mathematically) with flow source being the only parentless node and dst
+        being the only sink.
+        Args:
+            graph: Graph with edge weights to prune edges
+            flow: A pair of nodes to be source and destination
+
+        Returns:
+            A DAG from source to destination
+        """
+        graph = graph.copy()
+        to_explore: List[int] = [ flow[0]]  # TODO: use priority queue with distances
+        # maps node to its parent. Nodes must have at most one parent unless
+        # they are "on_path"
+        parents_map: Dict[List[int]] = collections.defaultdict(list)
+        # list of edges where our frontier butts up against itself. We need to
+        # carefully prune edges around this point to remove cycles
+        frontier_meets: Set[Tuple[int, int]] = set()
+
+        # first we explore all the nodes from the source
+        explored_nodes: Set[int] = set()
+        while to_explore:
+            current_node = to_explore.pop(0)
+            # see if we've already been to this node
+            if current_node in explored_nodes:
+                continue
+
+            # get the neighbours but remove the one we got here from
+            neighbours = set(graph.neighbors(current_node))
+            if current_node in parents_map:
+                neighbours.remove(parents_map[current_node][0])
+
+            # get ready to explore the neighbours
+            for neighbour in neighbours:
+                if neighbour == flow[1]:
+                    parents_map[flow[1]].append(current_node)
+                elif neighbour in explored_nodes:
+                    smallest = min(current_node, neighbour)
+                    largest = max(current_node, neighbour)
+                    frontier_meets.add((smallest, largest))
+                else:
+                    # put the neighbour on the queue of nodes to explore
+                    if neighbour not in to_explore:
+                        to_explore.append(neighbour)
+                        # and make current node the parent
+                        parents_map[neighbour].append(current_node)
+
+            # we've explored this node so add it to the list
+            explored_nodes.add(current_node)
+
+        # now we traceback from the dst to see which nodes are on the right path
+        to_explore = [flow[1]]
+        on_path = set()
+        dest_dist = {flow[1]: 0}
+        while to_explore:
+            current_node = to_explore.pop(0)
+            # see if we've already been here
+            if current_node in on_path:
+                continue
+
+            # get ready to trace back to the parents
+            for parent in parents_map[current_node]:
+                to_explore.append(parent)
+                # TODO: use actual distances
+                dest_dist[parent] = dest_dist[current_node] + 1
+            # remember that his node is on the path src to dst
+            on_path.add(current_node)
+
+        # now we add frontier meets to the path
+        for node_a, node_b in frontier_meets:
+            # find the distance from dst of first ancestor that is on_path for
+            # each node
+            ancestor_on_path_a = self.trace_to_on_path(node_a, parents_map, on_path)
+            ancestor_on_path_b = self.trace_to_on_path(node_b, parents_map, on_path)
+            if dest_dist[ancestor_on_path_a] > dest_dist[ancestor_on_path_b]:
+                path_start = node_a
+                path_end = node_b
+                ancestor_end = ancestor_on_path_b
+            elif dest_dist[ancestor_on_path_b] > dest_dist[ancestor_on_path_a]:
+                path_start = node_b
+                path_end = node_a
+                ancestor_end = ancestor_on_path_a
+            else:
+                # this could lead to a loops so don't use this path
+                continue
+
+            # TODO: try some sort of distance interpolation instead maybe?
+            path_dist = dest_dist[ancestor_end]
+
+            ## we want to direct flow the other way along here, so reparent, set
+            # on_path and give a dest_dist
+            current = path_end
+            previous = path_start
+            while current not in on_path:
+                # put on_path
+                on_path.add(current)
+                # give a dest_dist
+                dest_dist[current] = path_dist
+                # get next node on the path
+                parent = parents_map[current][0]
+                # flip our parent pointer
+                parents_map[current] = [previous]
+                # now we hop up the path
+                previous = current
+                current = parent
+            # reparent point where this path meets on_path
+            parents_map[ancestor_end].append(previous)
+
+            # finally we give all the path_start nodes a correct dest_dist and
+            # set on_path
+            current = path_start
+            while current not in on_path:
+                dest_dist[current] = path_dist
+                on_path.add(current)
+                parent = parents_map[current][0]
+                current = parent
+
+        # finally, we prune links we don't need
+        edges = list(graph.edges)
+        for (src, dst) in edges:
+            # remove edges not on the path
+            if src not in on_path or dst not in on_path:
+                graph.remove_edge(src, dst)
+            # remove edges against the path
+            elif src not in parents_map[dst]:
+                graph.remove_edge(src, dst)
+
+        return graph
+
+    def trace_to_on_path(self, node: int, parents_map: Dict, on_path: [int]) -> int:
+        """
+        Part of graph pruning. Returns the first ancestor in the 'on_path' set
+        Args:
+            node: node to start at
+            parents_map: map from nodes to lists of their parent nodes
+            on_path: set of nodes that are on a path src to dst
+
+        Returns:
+            The first ancestor in on_path
+        """
+        current = node
+        while current not in on_path:
+            current = parents_map[current][0]
+        return current
+
 
     def softmin(self, array: np.ndarray, gamma: float) -> np.ndarray:
         """
