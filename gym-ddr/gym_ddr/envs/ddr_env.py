@@ -1,4 +1,5 @@
 import collections
+from queue import PriorityQueue
 from typing import Tuple, List, Dict, Type, Set
 
 import gym
@@ -355,13 +356,9 @@ class DDREnvSoftmin(DDREnv):
             pruned_graph = self.prune_graph(self.graph, flow)
 
             # then we get distance to dest values for each node
-            distance_results = nx.single_source_bellman_ford_path_length(
-                pruned_graph, flow[1], weight='route_weight')
-            distances = np.zeros(pruned_graph.number_of_nodes(), dtype=np.float)
-
-            # make the distances lookupable by node
-            for (target, distance) in distance_results.items():
-                distances[target] = distance
+            distances = collections.defaultdict(int)
+            distance_results = nx.shortest_path_length(pruned_graph, source=None, target=flow[1], weight='route_weight')
+            distances.update(distance_results)
 
             # then we calculate softmin splitting for the out-edges on each node
             for node in range(self.graph.number_of_nodes()):
@@ -395,7 +392,8 @@ class DDREnvSoftmin(DDREnv):
             A DAG from source to destination
         """
         graph = graph.copy()
-        to_explore: List[int] = [ flow[0]]  # TODO: use priority queue with distances
+        to_explore: PriorityQueue[int] = PriorityQueue()
+        to_explore.put((0, flow[0], []))
         # maps node to its parent. Nodes must have at most one parent unless
         # they are "on_path"
         parents_map: Dict[List[int]] = collections.defaultdict(list)
@@ -405,16 +403,18 @@ class DDREnvSoftmin(DDREnv):
 
         # first we explore all the nodes from the source
         explored_nodes: Set[int] = set()
-        while to_explore:
-            current_node = to_explore.pop(0)
+        while not to_explore.empty():
+            distance, current_node, parents = to_explore.get()
             # see if we've already been to this node
             if current_node in explored_nodes:
                 continue
 
+            # set our parent(s)
+            parents_map[current_node] = parents
+
             # get the neighbours but remove the one we got here from
             neighbours = set(graph.neighbors(current_node))
-            if current_node in parents_map:
-                neighbours.remove(parents_map[current_node][0])
+            neighbours.difference_update(parents)
 
             # get ready to explore the neighbours
             for neighbour in neighbours:
@@ -426,29 +426,25 @@ class DDREnvSoftmin(DDREnv):
                     frontier_meets.add((smallest, largest))
                 else:
                     # put the neighbour on the queue of nodes to explore
-                    if neighbour not in to_explore:
-                        to_explore.append(neighbour)
-                        # and make current node the parent
-                        parents_map[neighbour].append(current_node)
+                    to_explore.put((distance + graph[current_node][neighbour]['route_weight'], neighbour, [current_node]))
 
             # we've explored this node so add it to the list
             explored_nodes.add(current_node)
 
         # now we traceback from the dst to see which nodes are on the right path
-        to_explore = [flow[1]]
+        to_explore_trace: List[int] = [flow[1]]
         on_path = set()
         dest_dist = {flow[1]: 0}
-        while to_explore:
-            current_node = to_explore.pop(0)
+        while to_explore_trace:
+            current_node = to_explore_trace.pop(0)
             # see if we've already been here
             if current_node in on_path:
                 continue
 
             # get ready to trace back to the parents
             for parent in parents_map[current_node]:
-                to_explore.append(parent)
-                # TODO: use actual distances
-                dest_dist[parent] = dest_dist[current_node] + 1
+                to_explore_trace.append(parent)
+                dest_dist[parent] = dest_dist[current_node] + graph[parent][current_node]['route_weight']
             # remember that his node is on the path src to dst
             on_path.add(current_node)
 
