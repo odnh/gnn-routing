@@ -336,22 +336,6 @@ class DDREnvSoftmin(DDREnv):
 
         # then for each flow we calculate the splitting ratios
         for flow_idx, flow in enumerate(self.flows):
-            # # first we get distance to dest values for each node
-            # distance_results = nx.single_source_bellman_ford_path_length(
-            #     self.graph, flow[1], weight='route_weight')
-            # distances = np.zeros(self.graph.number_of_nodes(), dtype=np.float)
-
-            # # make the distances lookupable by node
-            # for (target, distance) in distance_results.items():
-            #     distances[target] = distance
-
-            # now we prune edges that take us further from the destination so
-            # that there are no cycles
-            # pruned_graph = self.graph.copy()
-            # for (src, dst) in self.graph.edges():
-            #     if distances[dst] >= distances[src]:
-            #         pruned_graph.remove_edge(src, dst)
-
             # first we prune the graph down to a DAG
             pruned_graph = self.prune_graph(self.graph, flow)
 
@@ -378,6 +362,34 @@ class DDREnvSoftmin(DDREnv):
                     full_routing[flow_idx][
                         self.edge_index_map[out_edges[out_edge_idx]]] = weight
         return full_routing
+
+    def prune_graph_simple(self, graph: nx.DiGraph, flow: Tuple[int, int]) -> nx.DiGraph:
+        """
+        Remove cycles between flow source and sink. Uses distances to give a
+        partial topological order then removes edges that take us in the wrong
+        direction. Simple but removes more paths than necessary.
+        Args:
+            graph: graph to DAGify
+            flow: source and sink of the flow
+
+        Returns:
+            A DAG with source at the start and sink at the end
+        """
+        graph = graph.copy()
+
+        # first calculate distance to sink for each vertex
+        distances = collections.defaultdict(int)
+        distance_results = nx.shortest_path_length(graph, source=None,
+                                                   target=flow[1],
+                                                   weight='route_weight')
+        distances.update(distance_results)
+
+        # now we prune edges that take us further from the destination so
+        # that there are no cycles
+        for (src, dst) in list(graph.edges()):
+            if distances[dst] >= distances[src]:
+                graph.remove_edge(src, dst)
+        return graph
 
     def prune_graph(self, graph: nx.DiGraph, flow: Tuple[int, int]) -> nx.DiGraph:
         """
