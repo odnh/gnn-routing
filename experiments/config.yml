@@ -1,26 +1,24 @@
 # env parameters
 env: ddr-softmin-v0  # for iterative use 'ddr-iterative-v0'
-softmin_gamma: 2  # value of gamma to use for softmin routing (currently unused)
-memory_length: 2 # length of history of DMs input to the network as an observation
+memory_length: 1 # length of history of DMs input to the network as an observation
 
 # policy parameters
-policy: gnn  # different choices: 'mlp', 'iter'
-gnn_iterations: 10  # number of iterations of message-passing for gnn to perform
+policy: gnn  # different choices: 'mlp', 'iter', 'lstm'
+gnn_iterations: 1  # number of iterations of message-passing for gnn to perform
 hyperparameters:  # json file containing PPO2 hyperparameters to override defaults
 graph:  # empty uses a small-ish test graph. otherwise names match those in the topologyzoo data folder
-vf_arch: shared  # value function architecture (don't use with mlp policy). different choices: 'mlp', 'shared'
-lstm: false  # whether to place an lstm on the front of the policy network
+vf_arch: shared  # value function architecture (don't use with mlp policy). different choices: 'mlp', 'shared', 'shared_iter'
 timesteps: 10000
 
 # DM sequence parameters
 demand_seeds:  # list of seeds for generating DM sequences
   - 2
-cycle_length: 2  # length of cycle that repeats in DM sequence
+cycle_length: 1  # length of cycle that repeats in DM sequence
 sparsity: 0.0
 sequence_length: 11
 
 # miscellaneous
-seed: 1  # overall seed - is broken
+seed: 1  # overall seed - is broken I think
 parallelism: 4
 
 # parameters for tensorboard log and model saving
@@ -29,4 +27,4 @@ log_name: gnn
 model_path: gnn.zip
 
 # how many steps to replay (use sequence length - 1, but multiply by number of edges for iterative)
-replay_steps: 11
+replay_steps: 100
