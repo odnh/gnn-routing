@@ -20,10 +20,9 @@ from gym_ddr.envs.max_link_utilisation import MaxLinkUtilisation
 import numpy as np
 from stable_baselines import PPO2
 from stable_baselines.common.vec_env import SubprocVecEnv
-from stable_baselines.common.policies import ActorCriticPolicy
-from stable_baselines_ddr.policies import MlpDdrPolicy, MlpLstmDdrPolicy, \
-    GnnDdrPolicy, GnnDdrIterativePolicy, GnnLstmDdrPolicy, \
-    GnnLstmDdrIterativePolicy
+from stable_baselines.common.policies import ActorCriticPolicy, LstmPolicy
+from stable_baselines_ddr.policies import MlpDdrPolicy, GnnDdrPolicy, \
+    GnnDdrIterativePolicy
 
 
 def true_reward_callback(locals_, globals_):
@@ -117,25 +116,27 @@ def demands_from_args(args: Dict, graph: nx.DiGraph) -> List[
 
 def policy_from_args(args: Dict, graph: nx.DiGraph) -> Tuple[
     ActorCriticPolicy, Dict]:
-    dm_memory_length = 1 if args['lstm'] else args['memory_length']
+    dm_memory_length = args['memory_length']
     iterations = args['gnn_iterations'] if 'gnn_iterations' in args else 10
     if args['policy'] == 'gnn':
-        policy = GnnLstmDdrPolicy if args['lstm'] else GnnDdrPolicy
+        policy = GnnDdrPolicy
         policy_kwargs = {'network_graph': graph,
                          'dm_memory_length': dm_memory_length,
                          'vf_arch': args['vf_arch'],
                          'iterations': iterations
                          }
     elif args['policy'] == 'iter':
-        policy = GnnLstmDdrIterativePolicy if args[
-            'lstm'] else GnnDdrIterativePolicy
+        policy = GnnDdrIterativePolicy
         policy_kwargs = {'network_graph': graph,
                          'dm_memory_length': dm_memory_length,
                          'vf_arch': args['vf_arch'],
                          'iterations': iterations
                          }
+    elif args['policy'] == 'lstm':
+        policy = LstmPolicy
+        policy_kwargs = {}
     else:
-        policy = MlpLstmDdrPolicy if args['lstm'] else MlpDdrPolicy
+        policy = MlpDdrPolicy
         policy_kwargs = {'network_graph': graph}
 
     return policy, policy_kwargs
@@ -153,8 +154,6 @@ def env_kwargs_from_args(args: Dict) -> Dict:
     env_kwargs = {}
     if 'memory_length' in args:
         env_kwargs['dm_memory_length'] = args['memory_length']
-    if 'softmin_gamma' in args:
-        env_kwargs['gamma'] = args['softmin_gamma']
     return env_kwargs
 
 
@@ -203,17 +202,12 @@ def argparser() -> argparse.ArgumentParser:
                         default=None, help="Name to save model as")
     parser.add_argument('-ln', action='store', dest='log_name', default=None,
                         help="Name for tensorboboard log")
-    parser.add_argument('-lstm', action='store_true', dest='lstm',
-                        help="Whether to use an lstm layer (default is false)")
     parser.add_argument('-rs', action='store', dest='replay_steps',
                         help="Number of steps to take when replaying the env")
     parser.add_argument('-mp', action='store', dest='model_path',
                         help="Path to the stored model to be loaded.")
     parser.add_argument('-gi', action='store', dest='gnn_iterations',
                         help="Number of message passing iterations in gnn")
-    parser.add_argument('-sg', action='store', dest='softmin_gamma',
-                        type=float, default=2.0,
-                        help="Value of gamma to use for softmin routing")
     return parser
 
 
