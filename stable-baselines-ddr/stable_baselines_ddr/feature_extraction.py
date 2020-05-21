@@ -83,7 +83,8 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
 
 def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
                   network_graph: nx.MultiDiGraph, dm_memory_length: int,
-                  iterations: int = 10, layer_size: int = 64, vf_arch: str = "mlp"):
+                  iterations: int = 10, layer_size: int = 64,
+                  vf_arch: str = "mlp"):
     """
     Constructs a graph network from the graph passed in. Then inputs are
     traffic demands, placed on nodes as feature vectors. The output policy
@@ -96,7 +97,6 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     latent_value``
     """
     latent = flat_observations
-    # latent = tf.Print(latent, [latent], "GNN input flat:", -1, 500)
 
     sorted_edges = sorted(network_graph.edges())
     num_edges = len(sorted_edges)
@@ -110,10 +110,12 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
         [[0, 0], [0, layer_size - (2 * dm_memory_length)]], dtype=np.int32))
 
     # initialise unused input features to all zeros
-    edge_features = tf.repeat(tf.constant(np.zeros((1, layer_size)), np.float32),
-                              num_batches * num_edges, axis=0)
-    global_features = tf.repeat(tf.constant(np.zeros((1, layer_size)), np.float32),
-                                num_batches, axis=0)
+    edge_features = tf.repeat(
+        tf.constant(np.zeros((1, layer_size)), np.float32),
+        num_batches * num_edges, axis=0)
+    global_features = tf.repeat(
+        tf.constant(np.zeros((1, layer_size)), np.float32),
+        num_batches, axis=0)
 
     # repeat edge information across batches and flattened for graph_nets
     sender_nodes = repeat_outer_dim(
@@ -145,7 +147,8 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     # NB: reshape needs num_edges as otherwise output tensor has too many
     #     unknown dims
     output_edges = tf.reshape(output_graph.edges,
-                              tf.constant([-1, num_edges * layer_size], np.int32))
+                              tf.constant([-1, num_edges * layer_size],
+                                          np.int32))
     output_edges = output_edges[:, 0::layer_size]
 
     # global output is softmin gamma
@@ -164,7 +167,8 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
 
 def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
                        network_graph: nx.MultiDiGraph, dm_memory_length: int,
-                       iterations: int = 10, vf_arch: str = "mlp"):
+                       iterations: int = 10, layer_size: int = 64,
+                       vf_arch: str = "mlp"):
     """
     Constructs a graph network from the graph passed in. Then inputs are
     traffic demands, placed on nodes as feature vectors. The inputs also
@@ -196,13 +200,19 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     node_features = tf.reshape(node_features_slice,
                                [-1, 2 * dm_memory_length],
                                name="node_feat_input")
+    node_features = tf.pad(node_features, tf.constant(
+        [[0, 0], [0, layer_size - (2 * dm_memory_length)]], dtype=np.int32))
     # reshape edge features to flat batches but vector in dim 1 per edge
     edge_features = tf.reshape(edge_features_slice, [-1, 3],
                                name="edge_feat_input")
+    edge_features = tf.pad(edge_features,
+                           tf.constant([[0, 0], [0, layer_size - 3]],
+                                       dtype=np.int32))
 
     # initialise global input features to zeros (as are unused)
-    global_features = repeat_inner_dim(
-        tf.constant(np.zeros((1, 1)), np.float32), num_batches)
+    global_features = tf.repeat(
+        tf.constant(np.zeros((1, layer_size)), np.float32),
+        num_batches, axis=0)
 
     # repeat edge information across batches and flattened for graph_nets
     sender_nodes = repeat_outer_dim(
@@ -231,12 +241,12 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     # Our only output is a single global which is the value to set the edge
     # We still output other for use in shared part of value function
     # The global output is: [edge_value, gamma_value]
-    model = DDRGraphNetwork(edge_output_size=1, node_output_size=1,
-                            global_output_size=2)
+    model = DDRGraphNetwork(layer_size=layer_size)
     output_graph = model(input_graph, iterations)
-    output_global = tf.reshape(output_graph.globals,
-                               tf.constant([-1, 2], np.int32))
-    latent_policy_gnn = output_global
+    output_globals = tf.reshape(output_graph.globals,
+                                tf.constant([-1, layer_size], np.int32))
+    output_globals = output_globals[:, 0:2]
+    latent_policy_gnn = output_globals
 
     # build value function network
     latent_vf = vf_builder(vf_arch, network_graph, latent, act_fun,
