@@ -67,12 +67,13 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
 
             self._value_fn = linear(vf_latent, 'vf', 1)
 
-            self._proba_distribution, self._policy, self.q_value = \
-                self.pdtype.proba_distribution_from_latent(pi_latent, vf_latent,
-                                                           init_scale=0.01)
+            # self._proba_distribution, self._policy, self.q_value = \
+            #     self.pdtype.proba_distribution_from_latent(pi_latent, vf_latent,
+            #                                                init_scale=0.01)
             # TODO: get this working (whole change of output space size thing)
-                # self.proba_distribution_no_pi_linear(pi_latent, vf_latent,
-                #                                      init_scale=0.01)
+            self._proba_distribution, self._policy, self.q_value = \
+                self.proba_distribution_no_pi_linear(pi_latent, vf_latent,
+                                                     init_scale=0.01)
 
         self._setup_init()
 

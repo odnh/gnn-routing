@@ -25,7 +25,6 @@ def run_model(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
               parallelism: int = 4):
     # oblivious_routing = yates.get_oblivious_routing(graph)
     oblivious_routing = routing_baselines.shortest_path_routing(graph)
-    print(oblivious_routing)
 
     # make env
     env = gym.make(env_name,

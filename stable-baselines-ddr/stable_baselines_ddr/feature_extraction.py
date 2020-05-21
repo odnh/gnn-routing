@@ -1,13 +1,12 @@
-from typing import List
-
-import numpy as np
 import networkx as nx
+import numpy as np
 import tensorflow as tf
 from graph_nets.graphs import GraphsTuple
 from stable_baselines.a2c.utils import linear
 from stable_baselines.common.tf_layers import ortho_init, _ln
-from stable_baselines_ddr.tensor_transformations import repeat_inner_dim, repeat_outer_dim
 from stable_baselines_ddr.graph_nets import DDRGraphNetwork
+from stable_baselines_ddr.tensor_transformations import repeat_inner_dim, \
+    repeat_outer_dim
 
 
 def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
@@ -57,7 +56,8 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
         latent_vf = act_fun(
             linear(latent_vf, "vf_fc1", 128, init_scale=np.sqrt(2)))
     elif vf_arch == "graph":
-        model_vf = DDRGraphNetwork(edge_output_size=8, node_output_size=8, global_output_size=8)
+        model_vf = DDRGraphNetwork(edge_output_size=8, node_output_size=8,
+                                   global_output_size=8)
         output_graph_vf = model_vf(input_graph, iterations)
         output_edges_vf = tf.reshape(output_graph_vf.edges,
                                      tf.constant([-1, num_edges * 8], np.int32))
@@ -65,7 +65,8 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
                                      tf.constant([-1, num_nodes * 8], np.int32))
         output_globals_vf = tf.reshape(output_graph_vf.globals,
                                        tf.constant([-1, 8], np.int32))
-        latent_vf = tf.concat([output_edges_vf, output_nodes_vf, output_globals_vf], 1)
+        latent_vf = tf.concat(
+            [output_edges_vf, output_nodes_vf, output_globals_vf], 1)
     elif vf_arch == "mlp":
         latent_vf = latent
         latent_vf = act_fun(
@@ -82,7 +83,7 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
 
 def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
                   network_graph: nx.MultiDiGraph, dm_memory_length: int,
-                  iterations: int = 10, vf_arch: str = "mlp"):
+                  iterations: int = 10, layer_size: int = 64, vf_arch: str = "mlp"):
     """
     Constructs a graph network from the graph passed in. Then inputs are
     traffic demands, placed on nodes as feature vectors. The output policy
@@ -95,6 +96,7 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     latent_value``
     """
     latent = flat_observations
+    # latent = tf.Print(latent, [latent], "GNN input flat:", -1, 500)
 
     sorted_edges = sorted(network_graph.edges())
     num_edges = len(sorted_edges)
@@ -104,12 +106,14 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     # slice the data dimension to split the edge and node features
     node_features = tf.reshape(latent, [-1, 2 * dm_memory_length],
                                name="node_feat_input")
+    node_features = tf.pad(node_features, tf.constant(
+        [[0, 0], [0, layer_size - (2 * dm_memory_length)]], dtype=np.int32))
 
     # initialise unused input features to all zeros
-    edge_features = repeat_inner_dim(
-        tf.constant(np.zeros((num_edges, 1)), np.float32), num_batches)
-    global_features = repeat_inner_dim(
-        tf.constant(np.zeros((1, 1)), np.float32), num_batches)
+    edge_features = tf.repeat(tf.constant(np.zeros((1, layer_size)), np.float32),
+                              num_batches * num_edges, axis=0)
+    global_features = tf.repeat(tf.constant(np.zeros((1, layer_size)), np.float32),
+                                num_batches, axis=0)
 
     # repeat edge information across batches and flattened for graph_nets
     sender_nodes = repeat_outer_dim(
@@ -135,18 +139,22 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
                               n_node=n_node_list,
                               n_edge=n_edge_list)
 
-    model = DDRGraphNetwork(edge_output_size=1, node_output_size=1,
-                                global_output_size=1)
+    model = DDRGraphNetwork(layer_size=layer_size)
     output_graph = model(input_graph, iterations)
+
     # NB: reshape needs num_edges as otherwise output tensor has too many
     #     unknown dims
     output_edges = tf.reshape(output_graph.edges,
-                              tf.constant([-1, num_edges], np.int32))
+                              tf.constant([-1, num_edges * layer_size], np.int32))
+    output_edges = output_edges[:, 0::layer_size]
+
     # global output is softmin gamma
     output_globals = tf.reshape(output_graph.globals,
-                                tf.constant([-1, 1], np.int32))
-    latent_policy_gnn = tf.concat([output_edges, output_globals], axis=1)
+                                tf.constant([-1, layer_size], np.int32))
+    output_globals = output_globals[:, 0]
+    output_globals = tf.reshape(output_globals, tf.constant([-1, 1], np.int32))
 
+    latent_policy_gnn = tf.concat([output_edges, output_globals], axis=1)
     # build value function network
     latent_vf = vf_builder(vf_arch, network_graph, latent, act_fun,
                            output_graph, input_graph, iterations)
@@ -178,8 +186,11 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     num_batches = tf.shape(latent)[0]
 
     # slice the data dimension to split the edge and node features
-    node_features_slice = tf.slice(latent, [0, 0], [-1, num_nodes * 2 * dm_memory_length])
-    edge_features_slice = tf.slice(latent, [0, num_nodes * 2 * dm_memory_length], [-1, -1])
+    node_features_slice = tf.slice(latent, [0, 0],
+                                   [-1, num_nodes * 2 * dm_memory_length])
+    edge_features_slice = tf.slice(latent,
+                                   [0, num_nodes * 2 * dm_memory_length],
+                                   [-1, -1])
 
     # reshape node features to flat batches but still vector in dim 1 per node
     node_features = tf.reshape(node_features_slice,
@@ -221,7 +232,7 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     # We still output other for use in shared part of value function
     # The global output is: [edge_value, gamma_value]
     model = DDRGraphNetwork(edge_output_size=1, node_output_size=1,
-                                global_output_size=2)
+                            global_output_size=2)
     output_graph = model(input_graph, iterations)
     output_global = tf.reshape(output_graph.globals,
                                tf.constant([-1, 2], np.int32))
