@@ -134,7 +134,7 @@ def policy_from_args(args: Dict, graph: nx.DiGraph) -> Tuple[
                          }
     elif args['policy'] == 'lstm':
         policy = LstmPolicy
-        policy_kwargs = {}
+        policy_kwargs = {'feature_extraction': 'mlp'}
     else:
         policy = MlpDdrPolicy
         policy_kwargs = {'network_graph': graph}
