@@ -547,6 +547,7 @@ class DDREnvSoftmin(DDREnv):
         Returns:
             np array the same size but softminned
         """
+        gamma = 2.0
         exponentiated = np.exp(np.multiply(array, -gamma))
         total = sum(exponentiated)
         return np.divide(exponentiated, total)
@@ -577,7 +578,7 @@ class DDREnvIterative(DDREnvSoftmin):
             high=np.inf,
             # Space contains per edge to set and already set
             shape=(dm_memory_length * graph.number_of_nodes() * 2 +
-                   (3 * graph.number_of_edges()),),
+                   (2 * graph.number_of_edges()),),
             dtype=np.float64)
 
         # Extra state to track partial completeness of single routing selection
@@ -595,6 +596,7 @@ class DDREnvIterative(DDREnvSoftmin):
 
         # save the reward for the entire iteration for logging
         self.iteration_reward = 0.0
+        self.last_gamma = 0.0
 
     def step(self, action: Type[np.ndarray]) -> Tuple[Observation,
                                                       float,
@@ -627,6 +629,7 @@ class DDREnvIterative(DDREnvSoftmin):
             gamma = action[1]
             routing = self.get_routing(np.append(self.edge_values, gamma))
             reward = self.get_reward(routing)
+            self.last_gamma = gamma  # save last used gamma for debugging
             self.iteration_reward = reward  # save the reward for the iteration for debugging
 
             # reset array of which edges have been set (to all zero)
@@ -690,11 +693,11 @@ class DDREnvIterative(DDREnvSoftmin):
         target_edge = np.identity(self.graph.number_of_edges())[
                       target_edge_idx:target_edge_idx + 1]
 
-        iter_info = np.empty((self.graph.number_of_edges() * 3,),
+        iter_info = np.empty((self.graph.number_of_edges() * 2,),
                              dtype=float)
-        iter_info[0::3] = self.edge_set  # TODO: maybe get rid of this?
-        iter_info[1::3] = target_edge
-        iter_info[2::3] = self.edge_values  # TODO: maybe don't do this as these are unscaled
+        iter_info[0::2] = self.edge_set  # TODO: maybe get rid of this?
+        iter_info[1::2] = target_edge
+        # iter_info[2::3] = self.edge_values  # TODO: maybe don't do this as these are unscaled
         demands_history = DDREnv.get_observation(self)
         return np.concatenate((demands_history, iter_info))
 
@@ -712,6 +715,7 @@ class DDREnvIterative(DDREnvSoftmin):
         data_dict.update({'iter_idx': self.iter_idx, 'target_edge': target_edge,
                           'edge_set': self.edge_set,
                           'values': self.edge_values,
+                          'gamma': self.last_gamma,
                           'real_reward': self.iteration_reward})
         # Extra logging for tensorboard at the end of an episode
         if self.done:

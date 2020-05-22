@@ -11,7 +11,7 @@ from stable_baselines_ddr.tensor_transformations import repeat_inner_dim, \
 
 def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
                act_fun: tf.function, shared_graph: GraphsTuple = None,
-               input_graph: GraphsTuple = None,
+               input_graph: GraphsTuple = None, layer_size: int = 64,
                iterations: int = 10) -> tf.Tensor:
     """
     Builds the value function network for
@@ -31,11 +31,11 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
 
     if vf_arch == "shared":
         output_edges_vf = tf.reshape(shared_graph.edges,
-                                     tf.constant([-1, num_edges], np.int32))
+                                     tf.constant([-1, num_edges*layer_size], np.int32))
         output_nodes_vf = tf.reshape(shared_graph.nodes,
-                                     tf.constant([-1, num_nodes], np.int32))
+                                     tf.constant([-1, num_nodes*layer_size], np.int32))
         output_globals_vf = tf.reshape(shared_graph.globals,
-                                       tf.constant([-1, 1], np.int32))
+                                       tf.constant([-1, layer_size], np.int32))
         latent_vf = tf.concat(
             [output_edges_vf, output_nodes_vf, output_globals_vf], 1)
         latent_vf = act_fun(
@@ -44,11 +44,11 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
             linear(latent_vf, "vf_fc1", 128, init_scale=np.sqrt(2)))
     elif vf_arch == "shared_iter":
         output_edges_vf = tf.reshape(shared_graph.edges,
-                                     tf.constant([-1, num_edges], np.int32))
+                                     tf.constant([-1, num_edges*layer_size], np.int32))
         output_nodes_vf = tf.reshape(shared_graph.nodes,
-                                     tf.constant([-1, num_nodes], np.int32))
+                                     tf.constant([-1, num_nodes*layer_size], np.int32))
         output_globals_vf = tf.reshape(shared_graph.globals,
-                                       tf.constant([-1, 2], np.int32))
+                                       tf.constant([-1, 2*layer_size], np.int32))
         latent_vf = tf.concat(
             [output_edges_vf, output_nodes_vf, output_globals_vf], 1)
         latent_vf = act_fun(
@@ -56,15 +56,14 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
         latent_vf = act_fun(
             linear(latent_vf, "vf_fc1", 128, init_scale=np.sqrt(2)))
     elif vf_arch == "graph":
-        model_vf = DDRGraphNetwork(edge_output_size=8, node_output_size=8,
-                                   global_output_size=8)
+        model_vf = DDRGraphNetwork(layer_size=layer_size)
         output_graph_vf = model_vf(input_graph, iterations)
         output_edges_vf = tf.reshape(output_graph_vf.edges,
-                                     tf.constant([-1, num_edges * 8], np.int32))
+                                     tf.constant([-1, num_edges * layer_size], np.int32))
         output_nodes_vf = tf.reshape(output_graph_vf.nodes,
-                                     tf.constant([-1, num_nodes * 8], np.int32))
+                                     tf.constant([-1, num_nodes * layer_size], np.int32))
         output_globals_vf = tf.reshape(output_graph_vf.globals,
-                                       tf.constant([-1, 8], np.int32))
+                                       tf.constant([-1, layer_size], np.int32))
         latent_vf = tf.concat(
             [output_edges_vf, output_nodes_vf, output_globals_vf], 1)
     elif vf_arch == "mlp":
@@ -160,7 +159,7 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     latent_policy_gnn = tf.concat([output_edges, output_globals], axis=1)
     # build value function network
     latent_vf = vf_builder(vf_arch, network_graph, latent, act_fun,
-                           output_graph, input_graph, iterations)
+                           output_graph, input_graph, layer_size, iterations)
 
     return latent_policy_gnn, latent_vf
 
@@ -203,10 +202,10 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     node_features = tf.pad(node_features, tf.constant(
         [[0, 0], [0, layer_size - (2 * dm_memory_length)]], dtype=np.int32))
     # reshape edge features to flat batches but vector in dim 1 per edge
-    edge_features = tf.reshape(edge_features_slice, [-1, 3],
+    edge_features = tf.reshape(edge_features_slice, [-1, 2],
                                name="edge_feat_input")
     edge_features = tf.pad(edge_features,
-                           tf.constant([[0, 0], [0, layer_size - 3]],
+                           tf.constant([[0, 0], [0, layer_size - 2]],
                                        dtype=np.int32))
 
     # initialise global input features to zeros (as are unused)
