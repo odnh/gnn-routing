@@ -65,7 +65,7 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
                 pi_latent, vf_latent = mlp_extractor(
                     tf.layers.flatten(self.processed_obs), net_arch, act_fun)
                 # Need this here as removed from proba_distribution
-                pi_latent = linear(pi_latent, 'pi', network_graph.number_of_edges(), init_scale=0.01,
+                pi_latent = linear(pi_latent, 'pi', network_graph.number_of_edges() + 1, init_scale=0.01,
                        init_bias=0.0)
 
             self._value_fn = linear(vf_latent, 'vf', 1)

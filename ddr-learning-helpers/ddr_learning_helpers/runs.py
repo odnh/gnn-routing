@@ -1,31 +1,32 @@
+"""
+A selection of functions for help in running experiments, tuning, models, and
+training rom the command line.
+"""
 import argparse
-import datetime
 import json
-import multiprocessing
-import os
 from typing import List, Dict, Tuple
-
-import networkx as nx
-import yaml
-from ddr_learning_helpers import graphs
+import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
-
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-import gym
-import gym_ddr.envs.demand_matrices as dm
-from gym_ddr.envs.max_link_utilisation import MaxLinkUtilisation
 import numpy as np
-from stable_baselines import PPO2
-from stable_baselines.common.vec_env import SubprocVecEnv
+import networkx as nx
+import yaml
 from stable_baselines.common.policies import ActorCriticPolicy, LstmPolicy
+
 from stable_baselines_ddr.policies import MlpDdrPolicy, GnnDdrPolicy, \
     GnnDdrIterativePolicy
+from ddr_learning_helpers import graphs
+import gym_ddr.envs.demand_matrices as dm
+from gym_ddr.envs.max_link_utilisation import MaxLinkUtilisation
 
 
 def true_reward_callback(locals_, globals_):
+    """
+    Callback to report the real reward on Tensorboard for iterative training
+    """
     self_ = locals_['self']
     if len(self_.ep_info_buf) != 0:
         summary = tf.Summary(
@@ -35,70 +36,9 @@ def true_reward_callback(locals_, globals_):
     return True
 
 
-def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
-                   demands: List[List[Tuple[np.ndarray, float]]],
-                   env_kwargs: Dict = {}, policy_kwargs: Dict = {},
-                   hyperparameters: Dict = {}, timesteps: int = 10000,
-                   parallelism: int = 4, model_name: str = "",
-                   log_name: str = "", replay_steps: int = 10):
-    oblivious_routing = None  # yates.get_oblivious_routing(graph)
-
-    # make env
-    env = lambda: gym.make(env_name,
-                           dm_sequence=demands,
-                           graph=graph,
-                           oblivious_routing=oblivious_routing,
-                           **env_kwargs)
-    vec_env = SubprocVecEnv([env for _ in range(parallelism)],
-                            start_method="spawn")
-
-    # make model
-    model = PPO2(policy,
-                 vec_env,
-                 cliprange_vf=-1,
-                 verbose=1,
-                 policy_kwargs=policy_kwargs,
-                 tensorboard_log="./gnn_tensorboard/",
-                 **hyperparameters)
-
-    # learn
-    if env_name == 'ddr-iterative-v0':
-        model.learn(total_timesteps=timesteps, tb_log_name=log_name,
-                    callback=true_reward_callback)
-    else:
-        model.learn(total_timesteps=timesteps, tb_log_name=log_name)
-
-    # save it
-    model.save(model_name)
-
-    # try it out
-    obs = vec_env.reset()
-    state = None
-    total_rewards = 0
-    if env_name == 'ddr-iterative-v0':
-        reward_inc = 0
-        for i in range(replay_steps - 1):
-            action, state = model.predict(obs, state=state, deterministic=True)
-            obs, reward, done, info = vec_env.step(action)
-            print(reward)
-            print(info)
-            if sum(info[0]['edge_set']) == 0:
-                reward_inc += 1
-                total_rewards += info[0]['real_reward']
-        print("Mean reward: ", total_rewards / reward_inc)
-    else:
-        for i in range(replay_steps - 1):
-            action, state = model.predict(obs, state=state, deterministic=True)
-            obs, reward, done, info = vec_env.step(action)
-            print(reward)
-            print(info)
-            total_rewards += reward[0]
-        print("Mean reward: ", total_rewards / (replay_steps - 1))
-    vec_env.close()
-
-
 def demands_from_args(args: Dict, graph: nx.DiGraph) -> List[
     List[Tuple[np.ndarray, float]]]:
+    """Uses program agruments to build demand sequnces"""
     num_demands = graph.number_of_nodes() * (graph.number_of_nodes() - 1)
     # because the first n demands are used to build the history
     sequence_length = args['sequence_length'] + args['memory_length']
@@ -116,6 +56,7 @@ def demands_from_args(args: Dict, graph: nx.DiGraph) -> List[
 
 def policy_from_args(args: Dict, graph: nx.DiGraph) -> Tuple[
     ActorCriticPolicy, Dict]:
+    """Uses program arguments to build policy network"""
     dm_memory_length = args['memory_length']
     iterations = args['gnn_iterations'] if 'gnn_iterations' in args else 10
     if args['policy'] == 'gnn':
@@ -143,6 +84,7 @@ def policy_from_args(args: Dict, graph: nx.DiGraph) -> Tuple[
 
 
 def graph_from_args(args: Dict) -> nx.DiGraph:
+    """Uses program arguments to build graph"""
     if args['graph']:
         graph = graphs.topologyzoo(args['graph'], 10000)
     else:
@@ -151,6 +93,7 @@ def graph_from_args(args: Dict) -> nx.DiGraph:
 
 
 def env_kwargs_from_args(args: Dict) -> Dict:
+    """Uses program arguments to build env"""
     env_kwargs = {}
     if 'memory_length' in args:
         env_kwargs['dm_memory_length'] = args['memory_length']
@@ -158,66 +101,60 @@ def env_kwargs_from_args(args: Dict) -> Dict:
 
 
 def argparser() -> argparse.ArgumentParser:
+    """Builds argparser for program arguments"""
     parser = argparse.ArgumentParser(description="Run DDR experiment")
     parser.add_argument('-c', action='store', dest='config',
-                        help="Config file to read. Overrides all other options")
+                        help="Config file to read. Other options override this")
     parser.add_argument('-hy', action='store', dest='hyperparameters',
-                        default=None,
-                        help="Hyperprameter config file to read.")
+                        help="Hyperprameter (json) config file to read.")
     parser.add_argument('-e', action='store', dest='env',
-                        default='ddr-iterative-v0',
                         help="Name of environment to train on")
     parser.add_argument('-p', action='store', dest='policy',
-                        default='iter',
                         help="Name of the policy to use")
     parser.add_argument('-g', action='store', dest='graph',
                         help="Name of graph to train on")
     parser.add_argument('-t', action='store', dest='timesteps', type=int,
-                        default=10000,
                         help="Number of timesteps of training to perform")
     parser.add_argument('-m', action='store', dest='memory_length', type=int,
-                        default=10,
                         help="Demand matrix memory length")
     parser.add_argument('-s', nargs='+', dest='demand_seeds', type=int,
-                        default=[1],
                         help="Seeds for demand sequences")
     parser.add_argument('-q', action='store', dest='cycle_length', type=int,
-                        default=5,
                         help="Length of cycles in demand matrix sequence")
     parser.add_argument('-sp', action='store', dest='sparsity', type=float,
-                        default=0.0,
                         help="Demand matrix sparsity")
     parser.add_argument('-l', action='store', dest='sequence_length', type=int,
-                        default=50,
                         help="Demand matrix sequence length")
-    parser.add_argument('-v', action='store', dest='vf_arch', default='graph',
+    parser.add_argument('-v', action='store', dest='vf_arch',
                         help="Value function architecture")
     parser.add_argument('-sd', action='store', dest='seed', type=int,
-                        default=int(datetime.datetime.now().timestamp()),
                         help="Random seed for the run")
     parser.add_argument('-pl', action='store', dest='parallelism', type=int,
-                        default=4,
                         help="Number of envs to run in parallel")
     parser.add_argument('-mn', action='store', dest='model_name', type=int,
-                        default=None, help="Name to save model as")
-    parser.add_argument('-ln', action='store', dest='log_name', default=None,
-                        help="Name for tensorboboard log")
+                        help="Name to save model as")
+    parser.add_argument('-ln', action='store', dest='log_name',
+                        help="Name for tensorboard log")
     parser.add_argument('-rs', action='store', dest='replay_steps',
                         help="Number of steps to take when replaying the env")
     parser.add_argument('-mp', action='store', dest='model_path',
                         help="Path to the stored model to be loaded.")
     parser.add_argument('-gi', action='store', dest='gnn_iterations',
                         help="Number of message passing iterations in gnn")
+    parser.add_argument('-o', action='store', dest='output_path',
+                        help="Path of file to write output to")
     return parser
 
 
 def args_from_config(args: Dict) -> Dict:
+    """Loads yml config file in place of arguments"""
     with open(args['config'], 'r') as stream:
         config = yaml.safe_load(stream)
     return config
 
 
 def read_hyperparameters(args: Dict) -> Dict:
+    """Reads in hyperparameters from json config file"""
     hyperparameters = {}
     if args['hyperparameters']:
         with open(args['hyperparameters'], 'r') as stream:
@@ -226,36 +163,7 @@ def read_hyperparameters(args: Dict) -> Dict:
 
 
 def seed(seed: int):
+    """Attempts to seed things for ability to get deterministic results"""
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
     tf.set_random_seed(seed)
-
-
-if __name__ == "__main__":
-    multiprocessing.set_start_method('spawn')
-    parser = argparser()
-    args = vars(parser.parse_args())
-
-    if args['config']:
-        args = args_from_config(args)
-
-    args['model_name'] = args['model_name'] if args[
-        'model_name'] else "{}_{}_{}".format(args['env'], args['policy'],
-                                             args['graph'])
-    args['log_name'] = args['log_name'] if args['log_name'] else args[
-        'model_name']
-
-    print("Run configuration:")
-    print(args)
-    seed(args['seed'])
-
-    hyperparameters = read_hyperparameters(args)
-    graph = graph_from_args(args)
-    policy, policy_kwargs = policy_from_args(args, graph)
-    demands = demands_from_args(args, graph)
-    env_kwargs = env_kwargs_from_args(args)
-
-    run_experiment(args['env'], policy, graph, demands, env_kwargs,
-                   policy_kwargs, hyperparameters, args['timesteps'],
-                   args['parallelism'], args['log_name'], args['model_name'],
-                   args['replay_steps'])

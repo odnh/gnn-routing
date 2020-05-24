@@ -147,7 +147,7 @@ class MLPCustomGN(snt.AbstractModule):
 
     def __init__(self, layer_size=32, name="MLPCustomGN"):
         super(MLPCustomGN, self).__init__(name=name)
-        layers = [layer_size] * 2
+        layers = [layer_size] * 3
         with self._enter_variable_scope():
             self._network = modules.GraphNetwork(make_mlp_model_custom(layers), make_mlp_model_custom(layers),
                                                  make_mlp_model_custom(layers))

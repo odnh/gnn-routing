@@ -82,7 +82,7 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
 
 def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
                   network_graph: nx.MultiDiGraph, dm_memory_length: int,
-                  iterations: int = 10, layer_size: int = 64,
+                  iterations: int = 10, layer_size: int = 128,
                   vf_arch: str = "mlp"):
     """
     Constructs a graph network from the graph passed in. Then inputs are

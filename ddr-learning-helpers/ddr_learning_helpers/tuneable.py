@@ -1,11 +1,11 @@
+"""
+An implementation of an experiment runner that can be called with various
+different hyperparameters by OpenTuner
+"""
 import os
-from typing import List, Dict, Tuple
-
-import networkx as nx
-import yaml
-from ddr_learning_helpers import graphs
 
 import warnings
+
 warnings.simplefilter("ignore")
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -13,13 +13,7 @@ import tensorflow as tf
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-import gym
-import numpy as np
-from stable_baselines import PPO2
-from stable_baselines.common.vec_env import SubprocVecEnv
-from stable_baselines.common.policies import ActorCriticPolicy
-
-from run_experiments import *
+from .runs import *
 
 
 def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
@@ -71,7 +65,7 @@ def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
             obs, rewards, dones, info = vec_env.step(action)
             if sum(info[0]['edge_set']) == 0:
                 reward_inc += 1
-                total_rewards += info[0]['real_reward'] 
+                total_rewards += info[0]['real_reward']
     else:
         obs = vec_env.reset()
         total_rewards = 0
@@ -96,5 +90,5 @@ def run_tuning(hyperparameters: Dict, config_path: str):
     env_kwargs = env_kwargs_from_args(config)
 
     return run_experiment(config['env'], policy, graph, demands, env_kwargs,
-                   policy_kwargs, hyperparameters,
-                   config['timesteps'], config['parallelism'])
+                          policy_kwargs, hyperparameters,
+                          config['timesteps'], config['parallelism'])

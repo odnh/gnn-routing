@@ -4,7 +4,7 @@ from opentuner import LogFloatParameter
 from opentuner import MeasurementInterface
 from opentuner import Result
 
-from tuneable import run_tuning
+from ddr_learning_helpers.tuneable import run_tuning
 
 
 class DdrTuner(MeasurementInterface):
@@ -23,8 +23,8 @@ class DdrTuner(MeasurementInterface):
 
     def run(self, desired_result, input, limit):
         """
-        Compile and run a given configuration then
-        return performance
+        Run training with particular hyperparameters and see how goo the
+        performance is
         """
         cfg = desired_result.configuration.data
 
