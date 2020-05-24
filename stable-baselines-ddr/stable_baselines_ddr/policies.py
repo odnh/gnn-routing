@@ -3,7 +3,8 @@ from stable_baselines.common.policies import ActorCriticPolicy
 from stable_baselines.common.policies import mlp_extractor
 from stable_baselines.common.policies import nature_cnn
 from stable_baselines.common.tf_layers import linear
-from stable_baselines_ddr.feature_extraction import gnn_iter_extractor, gnn_extractor
+from stable_baselines_ddr.feature_extraction import gnn_iter_extractor, \
+    gnn_extractor
 
 
 class FeedForwardPolicyWithGnn(ActorCriticPolicy):
@@ -37,13 +38,13 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
                  reuse=False, layers=None,
                  net_arch=[dict(vf=[128, 128, 128], pi=[128, 128, 128])],
                  act_fun=tf.tanh, cnn_extractor=nature_cnn,
-                 feature_extraction="cnn", network_graph=None,
-                 dm_memory_length=None, iterations=10, vf_arch="graph",
+                 feature_extraction="gnn", network_graphs=None,
+                 dm_memory_length=None, iterations=10, vf_arch="mlp",
                  **kwargs):
         super(FeedForwardPolicyWithGnn, self).__init__(sess, ob_space, ac_space,
                                                        n_env, n_steps, n_batch,
                                                        reuse=reuse, scale=(
-                        feature_extraction == "cnn"))
+                    feature_extraction == "cnn"))
 
         self._kwargs_check(feature_extraction, kwargs)
 
@@ -54,19 +55,22 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
             elif feature_extraction == "gnn":
                 pi_latent, vf_latent = gnn_extractor(
                     tf.layers.flatten(self.processed_obs), act_fun,
-                    network_graph, dm_memory_length, iterations=iterations,
+                    network_graphs, dm_memory_length, iterations=iterations,
                     vf_arch=vf_arch)
             elif feature_extraction == "gnn_iter":
                 pi_latent, vf_latent = gnn_iter_extractor(
                     tf.layers.flatten(self.processed_obs), act_fun,
-                    network_graph, dm_memory_length, iterations=iterations,
+                    network_graphs, dm_memory_length, iterations=iterations,
                     vf_arch=vf_arch)
             else:  # Assume mlp feature extraction
                 pi_latent, vf_latent = mlp_extractor(
                     tf.layers.flatten(self.processed_obs), net_arch, act_fun)
                 # Need this here as removed from proba_distribution
-                pi_latent = linear(pi_latent, 'pi', network_graph.number_of_edges() + 1, init_scale=0.01,
-                       init_bias=0.0)
+                # ok to choose first as can only run mlp one one graph anyway
+                pi_latent = linear(pi_latent, 'pi',
+                                   network_graphs[0].number_of_edges() + 1,
+                                   init_scale=0.01,
+                                   init_bias=0.0)
 
             self._value_fn = linear(vf_latent, 'vf', 1)
 
@@ -80,15 +84,19 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
 
         self._setup_init()
 
-    def proba_distribution_no_pi_linear(self, pi_latent_vector, vf_latent_vector, init_scale=0.01, init_bias=0.0):
+    def proba_distribution_no_pi_linear(self, pi_latent_vector,
+                                        vf_latent_vector, init_scale=0.01,
+                                        init_bias=0.0):
         """
         Remove extra linear for debugging purposes
         """
         # mean = linear(pi_latent_vector, 'pi', self.size, init_scale=init_scale, init_bias=init_bias)
         mean = pi_latent_vector
-        logstd = tf.get_variable(name='pi/logstd', shape=[1, self.pdtype.size], initializer=tf.zeros_initializer())
+        logstd = tf.get_variable(name='pi/logstd', shape=[1, self.pdtype.size],
+                                 initializer=tf.zeros_initializer())
         pdparam = tf.concat([mean, mean * 0.0 + logstd], axis=1)
-        q_values = linear(vf_latent_vector, 'q', self.pdtype.size, init_scale=init_scale, init_bias=init_bias)
+        q_values = linear(vf_latent_vector, 'q', self.pdtype.size,
+                          init_scale=init_scale, init_bias=init_bias)
         return self.pdtype.proba_distribution_from_flat(pdparam), mean, q_values
 
     def step(self, obs, state=None, mask=None, deterministic=False):

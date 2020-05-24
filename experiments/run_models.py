@@ -66,7 +66,7 @@ def run_model(env_name: str, graph: nx.DiGraph,
             oblivious_utilisations.append(info[0]['oblivious_utilisation'])
     print("Mean reward: ", np.mean(np.divide(utilisations, opt_utilisations)))
     print("Mean oblivious reward: ",
-          np.mean(np.divide(utilisations, oblivious_utilisations)))
+          np.mean(np.divide(oblivious_utilisations, opt_utilisations)))
     envs.close()
 
     return utilisations, opt_utilisations, oblivious_utilisations
@@ -77,8 +77,8 @@ if __name__ == "__main__":
     parser = argparser()
     cli_args = vars(parser.parse_args())
 
-    if cli_args['config']:
-        args = args_from_config(cli_args)
+    if 'config' in cli_args:
+        args = args_from_config(cli_args['config'])
         # and add cli overrides
         args.update((k, cli_args[k]) for k in cli_args.keys() if
                     cli_args[k] is not None)

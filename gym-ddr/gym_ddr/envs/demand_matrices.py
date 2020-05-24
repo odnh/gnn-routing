@@ -4,8 +4,7 @@ import networkx as nx
 import numpy as np
 from numpy.random import RandomState
 
-Demand = Type[np.ndarray]
-
+Demand = np.ndarray
 
 # NB: demands are not matrices, but 1D arrays in deterministic ordering
 

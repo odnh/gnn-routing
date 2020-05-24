@@ -1,8 +1,9 @@
-import os
 import multiprocessing
+import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
+
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 import gym
@@ -12,18 +13,19 @@ from stable_baselines.common.vec_env import SubprocVecEnv
 from ddr_learning_helpers.runs import *
 
 
-def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
+def run_experiment(env_name: str, policy: ActorCriticPolicy, graphs: List[nx.DiGraph],
                    demands: List[List[Tuple[np.ndarray, float]]],
                    env_kwargs: Dict = {}, policy_kwargs: Dict = {},
                    hyperparameters: Dict = {}, timesteps: int = 10000,
                    parallelism: int = 4, model_name: str = "",
-                   log_name: str = "", replay_steps: int = 10):
+                   log_name: str = "", replay_steps: int = 10,
+                   tensorboard_log: str = None):
     oblivious_routing = None
 
     # make env
     env = lambda: gym.make(env_name,
                            dm_sequence=demands,
-                           graph=graph,
+                           graphs=graphs,
                            oblivious_routing=oblivious_routing,
                            **env_kwargs)
     vec_env = SubprocVecEnv([env for _ in range(parallelism)],
@@ -35,7 +37,7 @@ def run_experiment(env_name: str, policy: ActorCriticPolicy, graph: nx.DiGraph,
                  cliprange_vf=-1,
                  verbose=1,
                  policy_kwargs=policy_kwargs,
-                 tensorboard_log="./gnn_tensorboard/",
+                 tensorboard_log=tensorboard_log,
                  **hyperparameters)
 
     # learn
@@ -79,8 +81,8 @@ if __name__ == "__main__":
     parser = argparser()
     cli_args = vars(parser.parse_args())
 
-    if cli_args['config']:
-        args = args_from_config(cli_args)
+    if 'config' in cli_args:
+        args = args_from_config(cli_args['config'])
         # and add cli overrides
         args.update((k, cli_args[k]) for k in cli_args.keys() if
                     cli_args[k] is not None)
@@ -92,12 +94,12 @@ if __name__ == "__main__":
     seed(args['seed'])
 
     hyperparameters = read_hyperparameters(args)
-    graph = graph_from_args(args)
-    policy, policy_kwargs = policy_from_args(args, graph)
-    demands = demands_from_args(args, graph)
+    graphs = graphs_from_args(args['graphs'])
+    policy, policy_kwargs = policy_from_args(args, graphs)
+    demands = demands_from_args(args, graphs)
     env_kwargs = env_kwargs_from_args(args)
 
-    run_experiment(args['env'], policy, graph, demands, env_kwargs,
+    run_experiment(args['env'], policy, graphs, demands, env_kwargs,
                    policy_kwargs, hyperparameters, args['timesteps'],
                    args['parallelism'], args['log_name'], args['model_name'],
-                   args['replay_steps'])
+                   args['replay_steps'], args['tensorboard_log'])

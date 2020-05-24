@@ -18,7 +18,7 @@ from stable_baselines.common.policies import ActorCriticPolicy, LstmPolicy
 
 from stable_baselines_ddr.policies import MlpDdrPolicy, GnnDdrPolicy, \
     GnnDdrIterativePolicy
-from ddr_learning_helpers import graphs
+from ddr_learning_helpers.graphs import from_graphspec
 import gym_ddr.envs.demand_matrices as dm
 from gym_ddr.envs.max_link_utilisation import MaxLinkUtilisation
 
@@ -36,39 +36,60 @@ def true_reward_callback(locals_, globals_):
     return True
 
 
-def demands_from_args(args: Dict, graph: nx.DiGraph) -> List[
-    List[Tuple[np.ndarray, float]]]:
-    """Uses program agruments to build demand sequnces"""
-    num_demands = graph.number_of_nodes() * (graph.number_of_nodes() - 1)
-    # because the first n demands are used to build the history
-    sequence_length = args['sequence_length'] + args['memory_length']
-    dm_generator_getter = lambda seed: dm.cyclical_sequence(
-        # A function that returns a generator for a sequence of demands
-        lambda rs_l: dm.bimodal_demand(num_demands, rs_l),
-        sequence_length, args['cycle_length'], args['sparsity'],
-        seed=seed)
-    mlu = MaxLinkUtilisation(graph)
-    demand_sequences = map(dm_generator_getter, args['demand_seeds'])
-    demands_with_opt = [[(demand, mlu.opt(demand)) for demand in sequence] for
-                        sequence in demand_sequences]
-    return demands_with_opt
+def demands_from_args(args: Dict, graphs: List[nx.DiGraph]) -> List[List[
+    List[Tuple[np.ndarray, float]]]]:
+    """
+    Uses program arguments to build demand sequences. Return is list of list of
+    sequences paired with opt value, one set for each graph.
+    """
+    demands_per_graph = []
+    for graph in graphs:
+        num_demands = graph.number_of_nodes() * (graph.number_of_nodes() - 1)
+        # because the first n demands are used to build the history
+        sequence_length = args['sequence_length'] + args['memory_length']
+
+        # Select sequence type
+        if args['sequence_type'] == 'cyclical':
+            dm_generator_getter = lambda seed: dm.cyclical_sequence(
+                lambda rs_l: dm.bimodal_demand(num_demands, rs_l),
+                sequence_length, args['cycle_length'], args['sparsity'],
+                seed=seed)
+        elif args['sequence_type'] == 'gravity':
+            dm_generator_getter = lambda seed: dm.cyclical_sequence(
+                lambda _: dm.gravity_demand(graph),
+                sequence_length, args['cycle_length'], args['sparsity'],
+                seed=seed)
+        elif args['sequence_type'] == 'average':
+            dm_generator_getter = lambda seed: dm.average_sequence(
+                lambda rs_l: dm.bimodal_demand(num_demands, rs_l),
+                sequence_length, args['cycle_length'], args['sparsity'],
+                seed=seed)
+        else:
+            raise Exception("No such sequence type")
+
+        mlu = MaxLinkUtilisation(graph)
+        demand_sequences = map(dm_generator_getter, args['demand_seeds'])
+        demands_with_opt = [[(demand, mlu.opt(demand)) for demand in sequence] for
+                            sequence in demand_sequences]
+        demands_per_graph.append(demands_with_opt)
+    return demands_per_graph
 
 
-def policy_from_args(args: Dict, graph: nx.DiGraph) -> Tuple[
+def policy_from_args(args: Dict, graphs: List[nx.DiGraph]) -> Tuple[
     ActorCriticPolicy, Dict]:
     """Uses program arguments to build policy network"""
     dm_memory_length = args['memory_length']
     iterations = args['gnn_iterations'] if 'gnn_iterations' in args else 10
     if args['policy'] == 'gnn':
         policy = GnnDdrPolicy
-        policy_kwargs = {'network_graph': graph,
+        policy_kwargs = {'network_graphs': graphs,
                          'dm_memory_length': dm_memory_length,
                          'vf_arch': args['vf_arch'],
                          'iterations': iterations
                          }
     elif args['policy'] == 'iter':
         policy = GnnDdrIterativePolicy
-        policy_kwargs = {'network_graph': graph,
+        policy_kwargs = {'network_graphs': graphs,
                          'dm_memory_length': dm_memory_length,
                          'vf_arch': args['vf_arch'],
                          'iterations': iterations
@@ -78,18 +99,17 @@ def policy_from_args(args: Dict, graph: nx.DiGraph) -> Tuple[
         policy_kwargs = {'feature_extraction': 'mlp'}
     else:
         policy = MlpDdrPolicy
-        policy_kwargs = {'network_graph': graph}
+        policy_kwargs = {'network_graphs': graphs}
 
     return policy, policy_kwargs
 
 
-def graph_from_args(args: Dict) -> nx.DiGraph:
+def graphs_from_args(graphspecs: List[str]) -> List[nx.DiGraph]:
     """Uses program arguments to build graph"""
-    if args['graph']:
-        graph = graphs.topologyzoo(args['graph'], 10000)
-    else:
-        graph = graphs.basic()
-    return graph
+    graphs = []
+    for graphspec in graphspecs:
+        graphs.append(from_graphspec(graphspec))
+    return graphs
 
 
 def env_kwargs_from_args(args: Dict) -> Dict:
@@ -104,15 +124,16 @@ def argparser() -> argparse.ArgumentParser:
     """Builds argparser for program arguments"""
     parser = argparse.ArgumentParser(description="Run DDR experiment")
     parser.add_argument('-c', action='store', dest='config',
-                        help="Config file to read. Other options override this")
+                        help="Path of config file to read. Other options"
+                             "override these values.")
     parser.add_argument('-hy', action='store', dest='hyperparameters',
                         help="Hyperprameter (json) config file to read.")
     parser.add_argument('-e', action='store', dest='env',
                         help="Name of environment to train on")
     parser.add_argument('-p', action='store', dest='policy',
                         help="Name of the policy to use")
-    parser.add_argument('-g', action='store', dest='graph',
-                        help="Name of graph to train on")
+    parser.add_argument('-g', nargs='+', action='store', dest='graphs',
+                        help="Name of graphs to train on")
     parser.add_argument('-t', action='store', dest='timesteps', type=int,
                         help="Number of timesteps of training to perform")
     parser.add_argument('-m', action='store', dest='memory_length', type=int,
@@ -143,13 +164,23 @@ def argparser() -> argparse.ArgumentParser:
                         help="Number of message passing iterations in gnn")
     parser.add_argument('-o', action='store', dest='output_path',
                         help="Path of file to write output to")
+    parser.add_argument('-tb', action='store', dest='tensorboard_log',
+                        help="Path for the tensorboard log")
+    parser.add_argument('-st', action='store', dest='sequence_type',
+                        help="Type of demand sequence to use")
     return parser
 
 
-def args_from_config(args: Dict) -> Dict:
-    """Loads yml config file in place of arguments"""
-    with open(args['config'], 'r') as stream:
+def args_from_config(path: str) -> Dict:
+    """Loads YAML config file in place of arguments. YAML has special parameter:
+    'parents' which causes parent files to be read with options overridden by
+    this one. Takes list of paths, priority for arguments is last set seen."""
+    with open(path, 'r') as stream:
         config = yaml.safe_load(stream)
+    if 'parents' in config:
+        for parent in config['parents']:
+            parent_config = args_from_config(parent)
+            config = {**parent_config, **config}
     return config
 
 

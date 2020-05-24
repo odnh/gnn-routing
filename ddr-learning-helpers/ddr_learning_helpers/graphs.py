@@ -6,7 +6,7 @@ import numpy as np
 
 def random(num_nodes: int,
            num_edges: int,
-           weight: int = 1000) -> nx.OrderedDiGraph:
+           weight: int = 10000) -> nx.OrderedDiGraph:
     """
     Generates a random undirected networkx DiGraph (as in always same edge both
     ways)
@@ -80,4 +80,50 @@ def basic() -> nx.OrderedDiGraph:
     graph.add_edge(4, 3, weight=5000)
     graph.add_edge(4, 5, weight=5000)
     graph.add_edge(5, 4, weight=5000)
+    return graph
+
+def from_graphspec(graphspec: str) -> nx.DiGraph:
+    """
+    graphspec: topologyzooname:n/e:+/-:seed
+    i.e. can select by name and randomly drop/add an edge/node
+    """
+    weight = 10000
+    parsed = graphspec.split(":")
+    name = parsed[0]
+    graph = topologyzoo(name, weight)
+    if len(parsed) > 1:
+        seed = parsed[3]
+        random_state = np.random.RandomState(seed)
+        if parsed[1] == 'e':
+            if parsed[2] == '+':
+                node_a = random_state.randint(0, graph.number_of_nodes())
+                node_b = random_state.randint(0, graph.number_of_nodes())
+                if node_a == node_b:
+                    node_b = (node_a + 1) % graph.number_of_nodes()
+                if not graph.has_edge(node_a, node_b):
+                    graph.add_edge(node_a, node_b, weight=weight)
+                    graph.add_edge(node_b, node_a, weight=weight)
+            elif parsed[2] == '-':
+                edge_idx = random_state.randint(0, graph.number_of_edges())
+                edge = list(graph.edges())[edge_idx]
+                graph.remove_edge(edge[0], edge[1])
+                graph.remove_edge(edge[1], edge[0])
+            else:
+                raise Exception("Invalid graphspec")
+        elif parsed[1] == 'n':
+            if parsed[2] == '+':
+                node_a = graph.number_of_nodes()
+                node_b = random_state.randint(0, graph.number_of_nodes())
+                graph.add_node(graph.number_of_nodes())
+                graph.add_edge(node_a, node_b, weight=weight)
+                graph.add_edge(node_b, node_a, weight=weight)
+            elif parsed[2] == '-':
+                node = random_state.randint(0, graph.number_of_nodes())
+                graph.remove_node(node)
+            else:
+                raise Exception("Invalid graphspec")
+        else:
+            raise Exception("Invalid graphspec")
+
+        graph = nx.convert_node_labels_to_integers(graph)
     return graph

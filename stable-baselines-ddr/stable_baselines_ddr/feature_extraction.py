@@ -1,3 +1,5 @@
+from typing import List
+
 import networkx as nx
 import numpy as np
 import tensorflow as tf
@@ -9,7 +11,7 @@ from stable_baselines_ddr.tensor_transformations import repeat_inner_dim, \
     repeat_outer_dim
 
 
-def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
+def vf_builder(vf_arch: str, graphs: List[nx.DiGraph], latent: tf.Tensor,
                act_fun: tf.function, shared_graph: GraphsTuple = None,
                input_graph: GraphsTuple = None, layer_size: int = 64,
                iterations: int = 10) -> tf.Tensor:
@@ -26,14 +28,17 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
     Returns:
         A tensor which will hold the value
     """
-    num_edges = graph.number_of_edges()
-    num_nodes = graph.number_of_nodes()
+    # TODO: make support multiple graphs (and only use mlp vf until that point)
+    num_edges = graphs[0].number_of_edges()
+    num_nodes = graphs[0].number_of_nodes()
 
     if vf_arch == "shared":
         output_edges_vf = tf.reshape(shared_graph.edges,
-                                     tf.constant([-1, num_edges*layer_size], np.int32))
+                                     tf.constant([-1, num_edges * layer_size],
+                                                 np.int32))
         output_nodes_vf = tf.reshape(shared_graph.nodes,
-                                     tf.constant([-1, num_nodes*layer_size], np.int32))
+                                     tf.constant([-1, num_nodes * layer_size],
+                                                 np.int32))
         output_globals_vf = tf.reshape(shared_graph.globals,
                                        tf.constant([-1, layer_size], np.int32))
         latent_vf = tf.concat(
@@ -44,11 +49,14 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
             linear(latent_vf, "vf_fc1", 128, init_scale=np.sqrt(2)))
     elif vf_arch == "shared_iter":
         output_edges_vf = tf.reshape(shared_graph.edges,
-                                     tf.constant([-1, num_edges*layer_size], np.int32))
+                                     tf.constant([-1, num_edges * layer_size],
+                                                 np.int32))
         output_nodes_vf = tf.reshape(shared_graph.nodes,
-                                     tf.constant([-1, num_nodes*layer_size], np.int32))
+                                     tf.constant([-1, num_nodes * layer_size],
+                                                 np.int32))
         output_globals_vf = tf.reshape(shared_graph.globals,
-                                       tf.constant([-1, 2*layer_size], np.int32))
+                                       tf.constant([-1, 2 * layer_size],
+                                                   np.int32))
         latent_vf = tf.concat(
             [output_edges_vf, output_nodes_vf, output_globals_vf], 1)
         latent_vf = act_fun(
@@ -59,9 +67,11 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
         model_vf = DDRGraphNetwork(layer_size=layer_size)
         output_graph_vf = model_vf(input_graph, iterations)
         output_edges_vf = tf.reshape(output_graph_vf.edges,
-                                     tf.constant([-1, num_edges * layer_size], np.int32))
+                                     tf.constant([-1, num_edges * layer_size],
+                                                 np.int32))
         output_nodes_vf = tf.reshape(output_graph_vf.nodes,
-                                     tf.constant([-1, num_nodes * layer_size], np.int32))
+                                     tf.constant([-1, num_nodes * layer_size],
+                                                 np.int32))
         output_globals_vf = tf.reshape(output_graph_vf.globals,
                                        tf.constant([-1, layer_size], np.int32))
         latent_vf = tf.concat(
@@ -81,7 +91,7 @@ def vf_builder(vf_arch: str, graph: nx.DiGraph, latent: tf.Tensor,
 
 
 def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
-                  network_graph: nx.MultiDiGraph, dm_memory_length: int,
+                  network_graphs: List[nx.DiGraph], dm_memory_length: int,
                   iterations: int = 10, layer_size: int = 128,
                   vf_arch: str = "mlp"):
     """
@@ -95,15 +105,23 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     specified network. If all layers are shared, then ``latent_policy ==
     latent_value``
     """
-    latent = flat_observations
+    # get graph info
+    sorted_edges_list = [sorted(network_graph.edges()) for network_graph in network_graphs]
+    num_edges_list = [len(l) for l in sorted_edges_list]
+    max_edges_len = max(num_edges_list)
+    sorted_edges_list = [edges + [(0, 0)] * (max_edges_len - len(edges)) for edges in sorted_edges_list]
+    sorted_edges = tf.constant(sorted_edges_list)
+    num_edges = tf.constant(num_edges_list)
+    num_nodes = tf.constant( [network_graph.number_of_nodes() for network_graph in network_graphs])
 
-    sorted_edges = sorted(network_graph.edges())
-    num_edges = len(sorted_edges)
-    num_nodes = network_graph.number_of_nodes()
+    latent = flat_observations
+    graph_idx = tf.cast(latent[0, 0], np.int32)  # specify which graph to use (need to ensure only max one graph per batch)
+    obs_mask_end = num_nodes[graph_idx] * dm_memory_length * 2 + 1
+    observation = latent[:, 1:obs_mask_end]  # actual observation
     num_batches = tf.shape(latent)[0]
 
     # slice the data dimension to split the edge and node features
-    node_features = tf.reshape(latent, [-1, 2 * dm_memory_length],
+    node_features = tf.reshape(observation, [-1, 2 * dm_memory_length],
                                name="node_feat_input")
     node_features = tf.pad(node_features, tf.constant(
         [[0, 0], [0, layer_size - (2 * dm_memory_length)]], dtype=np.int32))
@@ -111,25 +129,25 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     # initialise unused input features to all zeros
     edge_features = tf.repeat(
         tf.constant(np.zeros((1, layer_size)), np.float32),
-        num_batches * num_edges, axis=0)
+        num_batches * num_edges[graph_idx], axis=0)
     global_features = tf.repeat(
         tf.constant(np.zeros((1, layer_size)), np.float32),
         num_batches, axis=0)
 
     # repeat edge information across batches and flattened for graph_nets
-    sender_nodes = repeat_outer_dim(
-        tf.constant(np.array([e[0] for e in sorted_edges]), np.int32),
-        num_batches)
-    receiver_nodes = repeat_outer_dim(
-        tf.constant(np.array([e[1] for e in sorted_edges]), np.int32),
-        num_batches)
+    sender_nodes = tf.reshape(
+        tf.tile(tf.expand_dims(sorted_edges[graph_idx][:num_edges[graph_idx], 0], axis=0),
+                tf.stack([num_batches, 1])), [-1])
+    receiver_nodes = tf.reshape(
+        tf.tile(tf.expand_dims(sorted_edges[graph_idx][:num_edges[graph_idx], 1], axis=0),
+                tf.stack([num_batches, 1])), [-1])
 
     # repeat graph information across batches and flattened for graph_nets
     n_node_list = tf.reshape(
-        repeat_inner_dim(tf.constant(np.array([[num_nodes]]), np.int32),
+        repeat_inner_dim(num_nodes[graph_idx, tf.newaxis, tf.newaxis],
                          num_batches), [-1])
     n_edge_list = tf.reshape(
-        repeat_inner_dim(tf.constant(np.array([[num_edges]]), np.int32),
+        repeat_inner_dim(num_edges[graph_idx, tf.newaxis, tf.newaxis],
                          num_batches), [-1])
 
     input_graph = GraphsTuple(nodes=node_features,
@@ -146,26 +164,28 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     # NB: reshape needs num_edges as otherwise output tensor has too many
     #     unknown dims
     output_edges = tf.reshape(output_graph.edges,
-                              tf.constant([-1, num_edges * layer_size],
-                                          np.int32))
+                              tf.stack([-1, num_edges[graph_idx] * layer_size]))
     output_edges = output_edges[:, 0::layer_size]
+    # and pad to max action size
+    output_edges = tf.pad(output_edges,
+                          [[0, 0], [0, max_edges_len - num_edges[graph_idx]]])
 
     # global output is softmin gamma
     output_globals = tf.reshape(output_graph.globals,
-                                tf.constant([-1, layer_size], np.int32))
+                                tf.constant([-1, layer_size]))
     output_globals = output_globals[:, 0]
-    output_globals = tf.reshape(output_globals, tf.constant([-1, 1], np.int32))
+    output_globals = tf.reshape(output_globals, tf.constant([-1, 1]))
 
     latent_policy_gnn = tf.concat([output_edges, output_globals], axis=1)
     # build value function network
-    latent_vf = vf_builder(vf_arch, network_graph, latent, act_fun,
+    latent_vf = vf_builder(vf_arch, network_graphs, latent, act_fun,
                            output_graph, input_graph, layer_size, iterations)
 
     return latent_policy_gnn, latent_vf
 
 
 def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
-                       network_graph: nx.MultiDiGraph, dm_memory_length: int,
+                       network_graphs: List[nx.DiGraph], dm_memory_length: int,
                        iterations: int = 10, layer_size: int = 64,
                        vf_arch: str = "mlp"):
     """
@@ -181,18 +201,26 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     specified network. If all layers are shared, then ``latent_policy ==
     latent_value``
     """
-    latent = flat_observations
+    # get graph info
+    sorted_edges_list = [sorted(network_graph.edges()) for network_graph in network_graphs]
+    num_edges_list = [len(l) for l in sorted_edges_list]
+    max_edges_len = max(num_edges_list)
+    sorted_edges_list = [edges + [(0, 0)] * (max_edges_len - len(edges)) for edges in sorted_edges_list]
+    sorted_edges = tf.constant(sorted_edges_list)
+    num_edges = tf.constant(num_edges_list)
+    num_nodes = tf.constant([network_graph.number_of_nodes() for network_graph in network_graphs])
 
-    sorted_edges = sorted(network_graph.edges())
-    num_edges = len(sorted_edges)
-    num_nodes = network_graph.number_of_nodes()
+    latent = flat_observations
+    graph_idx = tf.cast(latent[0, 0], np.int32)  # specify which graph to use (need to ensure only max one graph per batch)
+    obs_mask_end = (num_nodes[graph_idx] * dm_memory_length * 2) + (num_edges[graph_idx] * 2) + 1
+    observation = latent[:, 1:obs_mask_end]  # actual observation
     num_batches = tf.shape(latent)[0]
 
     # slice the data dimension to split the edge and node features
-    node_features_slice = tf.slice(latent, [0, 0],
-                                   [-1, num_nodes * 2 * dm_memory_length])
-    edge_features_slice = tf.slice(latent,
-                                   [0, num_nodes * 2 * dm_memory_length],
+    node_features_slice = tf.slice(observation, [0, 0],
+                                   [-1, num_nodes[graph_idx] * 2 * dm_memory_length])
+    edge_features_slice = tf.slice(observation,
+                                   [0, num_nodes[graph_idx] * 2 * dm_memory_length],
                                    [-1, -1])
 
     # reshape node features to flat batches but still vector in dim 1 per node
@@ -214,19 +242,19 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
         num_batches, axis=0)
 
     # repeat edge information across batches and flattened for graph_nets
-    sender_nodes = repeat_outer_dim(
-        tf.constant(np.array([e[0] for e in sorted_edges]), np.int32),
-        num_batches)
-    receiver_nodes = repeat_outer_dim(
-        tf.constant(np.array([e[1] for e in sorted_edges]), np.int32),
-        num_batches)
+    sender_nodes = tf.reshape(
+        tf.tile(tf.expand_dims(sorted_edges[graph_idx][:num_edges[graph_idx], 0], axis=0),
+                tf.stack([num_batches, 1])), [-1])
+    receiver_nodes = tf.reshape(
+        tf.tile(tf.expand_dims(sorted_edges[graph_idx][:num_edges[graph_idx], 1], axis=0),
+                tf.stack([num_batches, 1])), [-1])
 
     # repeat graph information across batches and flattened for graph_nets
     n_node_list = tf.reshape(
-        repeat_inner_dim(tf.constant(np.array([[num_nodes]]), np.int32),
+        repeat_inner_dim(num_nodes[graph_idx, tf.newaxis, tf.newaxis],
                          num_batches), [-1])
     n_edge_list = tf.reshape(
-        repeat_inner_dim(tf.constant(np.array([[num_edges]]), np.int32),
+        repeat_inner_dim(num_edges[graph_idx, tf.newaxis, tf.newaxis],
                          num_batches), [-1])
 
     input_graph = GraphsTuple(nodes=node_features,
@@ -248,7 +276,7 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     latent_policy_gnn = output_globals
 
     # build value function network
-    latent_vf = vf_builder(vf_arch, network_graph, latent, act_fun,
+    latent_vf = vf_builder(vf_arch, network_graphs, latent, act_fun,
                            output_graph, input_graph, iterations)
 
     return latent_policy_gnn, latent_vf
