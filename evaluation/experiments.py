@@ -6,20 +6,20 @@ from ddr_learning_helpers.runs import run_training, run_model
 
 # base definitions for each policy type
 base = {
-    'mlp': {'env': 'ddr-softmin-v0',
+    'mlp': {'env_name': 'ddr-softmin-v0',
             'policy': 'mlp',
             'hyperparameters': 'configs/hpm.json'},
-    'gnn': {'env': 'ddr-softmin-v0',
+    'gnn': {'env_name': 'ddr-softmin-v0',
             'policy': 'gnn',
             'gnn_iterations': 2,
             'vf_arch': 'mlp',
             'hyperparameters': 'configs/hpg.json'},
-    'iter': {'env': 'ddr-iterative-v0',
+    'iter': {'env_name': 'ddr-iterative-v0',
              'policy': 'iter',
              'gnn_iterations': 2,
              'vf_arch': 'mlp',
              'hyperparameters': 'configs/hpi.json'},
-    'lstm': {'env': 'ddr-softmin-v0',
+    'lstm': {'env_name': 'ddr-softmin-v0',
              'policy': 'lstm',
              'hyperparameters': 'configs/hpl.json',
              'memory_length': 1},
@@ -36,11 +36,12 @@ train = {
             'sequence_type': 'cyclical',
             'demand_seeds': [2],
             'cycle_length': 1,
-            'spasity': 0.0,
+            'sparsity': 0.0,
             'sequence_length': 2,
             'seed': 1,
-            'parallelism': 4,
+            'parallelism': 8,
             'tensorboard_log': None,
+            'log_name': 1,
             'replay_steps': 0
         },
     # exp 2
@@ -52,11 +53,12 @@ train = {
             'sequence_type': 'cyclical',
             'demand_seeds': [1, 2, 3, 4, 5],
             'cycle_length': 5,
-            'spasity': 0.0,
+            'sparsity': 0.0,
             'sequence_length': 6,
             'seed': 1,
-            'parallelism': 4,
+            'parallelism': 8,
             'tensorboard_log': None,
+            'log_name': 2,
             'replay_steps': 0
         },
     # exp 3
@@ -69,11 +71,12 @@ train = {
             'sequence_type': 'cyclical',
             'demand_seeds': [1, 2, 3, 4, 5],
             'cycle_length': 5,
-            'spasity': 0.0,
+            'sparsity': 0.0,
             'sequence_length': 6,
             'seed': 1,
-            'parallelism': 4,
+            'parallelism': 8,
             'tensorboard_log': None,
+            'log_name': 3,
             'replay_steps': 0
         },
     # exp 4 TODO: add options to use real dataset and fill in here
@@ -85,11 +88,12 @@ train = {
             'sequence_type': 'cyclical',
             'demand_seeds': [1, 2, 3, 4, 5],
             'cycle_length': 5,
-            'spasity': 0.0,
+            'sparsity': 0.0,
             'sequence_length': 6,
             'seed': 1,
-            'parallelism': 4,
+            'parallelism': 8,
             'tensorboard_log': None,
+            'log_name': 4,
             'replay_steps': 0
         }
 }
@@ -159,7 +163,7 @@ def run_experiment(spec_id: str, policy_id: str, test_id: str):
     config = {**train[spec_id],
               **test[spec_id][test_id],
               **base[policy_id],
-              'model_path': model_path,
+              'model_name': model_path,
               'output_path': output_path}
     run_model(config)
 
@@ -169,7 +173,7 @@ def train_model(spec_id: str, policy_id: str):
     model_path = "models/{}-{}".format(spec_id, policy_id)
     config = {**train[spec_id],
               **base[policy_id],
-              'model_path': model_path}
+              'model_name': model_path}
     run_training(config)
 
 
