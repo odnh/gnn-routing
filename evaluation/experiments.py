@@ -10,7 +10,7 @@ base = {
             'policy': 'mlp',
             'hyperparameters': 'configs/hpm.json'},
     'gnn': {'env': 'ddr-softmin-v0',
-            'policy': 'mlp',
+            'policy': 'gnn',
             'gnn_iterations': 2,
             'vf_arch': 'mlp',
             'hyperparameters': 'configs/hpg.json'},
@@ -76,7 +76,7 @@ train = {
             'tensorboard_log': None,
             'replay_steps': 0
         },
-    # exp 4 TODO: add options to use real data set and fill in here
+    # exp 4 TODO: add options to use real dataset and fill in here
     '4':
         {
             'memory_length': 10,
@@ -155,8 +155,7 @@ test = {
 def run_experiment(spec_id: str, policy_id: str, test_id: str):
     """Run a specific experiment. Model must already be trained"""
     model_path  = "models/{}-{}"    .format(spec_id, policy_id)
-    output_path = "results/{}.{}-{}".format(spec_id, test_id,
-                                            policy_id)
+    output_path = "results/{}.{}-{}".format(spec_id, test_id, policy_id)
     config = {**train[spec_id],
               **test[spec_id][test_id],
               **base[policy_id],
@@ -190,3 +189,8 @@ def run_experiments():
                 continue
             for test_id in test[spec_id].keys():
                 run_experiment(spec_id, policy_id, test_id)
+
+
+if __name__ == '__main__':
+    train_models()
+    run_experiments()
