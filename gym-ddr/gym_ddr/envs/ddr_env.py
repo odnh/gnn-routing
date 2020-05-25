@@ -45,7 +45,7 @@ class DDREnv(gym.Env):
                  dm_sequence: List[List[List[Tuple[Demand, float]]]],
                  dm_memory_length: int,
                  graphs: List[nx.DiGraph],
-                 oblivious_routing: np.ndarray = None):
+                 oblivious_routings: List[np.ndarray] = None):
         """
         Args:
           dm_sequence: the sequence of sequences of dms to use. This is a list
@@ -90,7 +90,7 @@ class DDREnv(gym.Env):
              if i != j] for num_nodes in
             [graph.number_of_nodes() for graph in graphs]]
 
-        self.oblivious_routing = oblivious_routing
+        self.oblivious_routings = oblivious_routings
 
         self.mlus = [MaxLinkUtilisation(graph) for graph in graphs]
         self.opt_utilisation = 0.0
@@ -231,10 +231,10 @@ class DDREnv(gym.Env):
             'opt_utilisation': self.opt_utilisation,
             'graph_index': self.graph_index
         }
-        if self.oblivious_routing is not None:
+        if self.oblivious_routings is not None:
             data_dict['oblivious_utilisation'] = self.mlus[
                 self.graph_index].calc(
-                self.dm_memory[0][0], self.oblivious_routing)
+                self.dm_memory[0][0], self.oblivious_routings[self.graph_index])
         return data_dict
 
 

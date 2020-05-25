@@ -4,11 +4,19 @@ training rom the command line.
 """
 import argparse
 import json
-from typing import List, Dict, Tuple
+import multiprocessing
 import os
+from typing import List, Dict, Tuple
+
+import gym
+from ddr_learning_helpers import routing_baselines
+from jsonlines import jsonlines
+from stable_baselines import PPO2
+from stable_baselines.common.vec_env import SubprocVecEnv, DummyVecEnv
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
+
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 import numpy as np
@@ -69,7 +77,8 @@ def demands_from_args(args: Dict, graphs: List[nx.DiGraph]) -> List[List[
 
         mlu = MaxLinkUtilisation(graph)
         demand_sequences = map(dm_generator_getter, args['demand_seeds'])
-        demands_with_opt = [[(demand, mlu.opt(demand)) for demand in sequence] for
+        demands_with_opt = [[(demand, mlu.opt(demand)) for demand in sequence]
+                            for
                             sequence in demand_sequences]
         demands_per_graph.append(demands_with_opt)
     return demands_per_graph
@@ -198,3 +207,154 @@ def seed(seed: int):
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
     tf.set_random_seed(seed)
+
+
+def run_training(config: Dict):
+    # TODO: give this a bit of a cleanup
+    """Runs training based on config passed in"""
+    multiprocessing.set_start_method('spawn')
+
+    print("Run configuration:")
+    print(config)
+    seed(config['seed'])
+
+    # read config
+    hyperparameters = read_hyperparameters(config)
+    graphs = graphs_from_args(config['graphs'])
+    policy, policy_kwargs = policy_from_args(config, graphs)
+    demands = demands_from_args(config, graphs)
+    env_kwargs = env_kwargs_from_args(config)
+    env_name = config['env_name']
+    timesteps = config['timesteps']
+    parallelism = config['parallelism']
+    log_name = config['log_name']
+    replay_steps = config['replay_steps']
+    model_name = config['model_name']
+    tensorboard_log = config['tensorboard_log']
+
+    oblivious_routings = None
+
+    # make env
+    env = lambda: gym.make(env_name,
+                           dm_sequence=demands,
+                           graphs=graphs,
+                           oblivious_routings=oblivious_routings,
+                           **env_kwargs)
+    vec_env = SubprocVecEnv([env for _ in range(parallelism)],
+                            start_method="spawn")
+
+    # make model
+    model = PPO2(policy,
+                 vec_env,
+                 cliprange_vf=-1,
+                 verbose=1,
+                 policy_kwargs=policy_kwargs,
+                 tensorboard_log=tensorboard_log,
+                 **hyperparameters)
+
+    # learn
+    if env_name == 'ddr-iterative-v0':
+        model.learn(total_timesteps=timesteps, tb_log_name=log_name,
+                    callback=true_reward_callback)
+    else:
+        model.learn(total_timesteps=timesteps, tb_log_name=log_name)
+
+    # save it
+    model.save(model_name)
+
+    # try it out
+    obs = vec_env.reset()
+    state = None
+    total_rewards = 0
+    if env_name == 'ddr-iterative-v0':
+        reward_inc = 0
+        for i in range(replay_steps - 1):
+            action, state = model.predict(obs, state=state,
+                                          deterministic=True)
+            obs, reward, done, info = vec_env.step(action)
+            print(reward)
+            print(info)
+            if sum(info[0]['edge_set']) == 0:
+                reward_inc += 1
+                total_rewards += info[0]['real_reward']
+        print("Mean reward: ", total_rewards / reward_inc)
+    else:
+        for i in range(replay_steps - 1):
+            action, state = model.predict(obs, state=state,
+                                          deterministic=True)
+            obs, reward, done, info = vec_env.step(action)
+            print(reward)
+            print(info)
+            total_rewards += reward[0]
+        print("Mean reward: ", total_rewards / (replay_steps - 1))
+    vec_env.close()
+
+
+def run_model(config: Dict):
+    # TODO: give this a bit of a cleanup
+    """Runs test on a model based on config passed in"""
+    multiprocessing.set_start_method('spawn')
+
+    print("Run configuration:")
+    print(config)
+    seed(config['seed'])
+
+    # read config
+    graphs = graphs_from_args(config['graphs'])
+    policy_name = config['policy_name']
+    model_path = config['model_path']
+    demands = demands_from_args(config, graphs)
+    env_kwargs = env_kwargs_from_args(config)
+    env_name = config['env_name']
+    parallelism = config['parallelism']
+    replay_steps = config['replay_steps']
+
+    oblivious_routings = [routing_baselines.shortest_path_routing(graph) for
+                          graph in graphs]
+
+    # make env
+    env = lambda: gym.make(env_name,
+                           dm_sequence=demands,
+                           graphs=graphs,
+                           oblivious_routings=oblivious_routings,
+                           **env_kwargs)
+
+    if policy_name == 'lstm':
+        envs = DummyVecEnv([env] * parallelism)
+    else:
+        envs = DummyVecEnv([env])
+
+    # load
+    model = PPO2.load(model_path)
+
+    # execute
+    obs = envs.reset()
+    state = None
+    utilisations = []
+    opt_utilisations = []
+    oblivious_utilisations = []
+    if env_name == 'ddr-iterative-v0':
+        for i in range(replay_steps - 1):
+            action, state = model.predict(obs, state=state, deterministic=True)
+            obs, reward, done, info = envs.step(action)
+            if info[0]['iter_idx'] == 0:
+                utilisations.append(info[0]['utilisation'])
+                opt_utilisations.append(info[0]['opt_utilisation'])
+                oblivious_utilisations.append(info[0]['oblivious_utilisation'])
+    else:
+        for i in range(replay_steps - 1):
+            action, state = model.predict(obs, state=state, deterministic=True)
+            obs, reward, done, info = envs.step(action)
+            utilisations.append(info[0]['utilisation'])
+            opt_utilisations.append(info[0]['opt_utilisation'])
+            oblivious_utilisations.append(info[0]['oblivious_utilisation'])
+    envs.close()
+
+    # write the results to file
+    result = {"utilisations": utilisations,
+              "opt_utilisations": opt_utilisations,
+              "oblivious_utilisations": oblivious_utilisations}
+    if 'output_path' in config:
+        data = {**config, **result}
+        with jsonlines.open(config['output_path'], 'w') as f:
+            f.write(data)

@@ -4,13 +4,14 @@ memory_length: 1 # length of history of DMs input to the network as an observati
 
 # policy parameters
 policy: gnn  # different choices: 'mlp', 'iter', 'lstm'
-gnn_iterations: 1  # number of iterations of message-passing for gnn to perform
+gnn_iterations: 2  # number of iterations of message-passing for gnn to perform
 hyperparameters:  # json file containing PPO2 hyperparameters to override defaults
 graph:  # empty uses a small-ish test graph. otherwise names match those in the topologyzoo data folder
-vf_arch: shared  # value function architecture (don't use with mlp policy). different choices: 'mlp', 'shared', 'shared_iter'
+vf_arch: mlp  # value function architecture (don't use with mlp policy). different choices: 'mlp', 'shared', 'shared_iter'. non-mlp choices currently broken
 timesteps: 10000
 
 # DM sequence parameters
+sequence_type: cyclical  # type of cycle to use
 demand_seeds:  # list of seeds for generating DM sequences
   - 2
 cycle_length: 1  # length of cycle that repeats in DM sequence
@@ -22,6 +23,7 @@ seed: 1  # overall seed - is broken I think
 parallelism: 4
 
 # parameters for tensorboard log and model saving
+tensorborad_log: tensorboard
 model_name: gnn
 log_name: gnn
 model_path: gnn.zip

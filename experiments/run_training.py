@@ -20,13 +20,13 @@ def run_experiment(env_name: str, policy: ActorCriticPolicy, graphs: List[nx.DiG
                    parallelism: int = 4, model_name: str = "",
                    log_name: str = "", replay_steps: int = 10,
                    tensorboard_log: str = None):
-    oblivious_routing = None
+    oblivious_routings = None
 
     # make env
     env = lambda: gym.make(env_name,
                            dm_sequence=demands,
                            graphs=graphs,
-                           oblivious_routing=oblivious_routing,
+                           oblivious_routings=oblivious_routings,
                            **env_kwargs)
     vec_env = SubprocVecEnv([env for _ in range(parallelism)],
                             start_method="spawn")

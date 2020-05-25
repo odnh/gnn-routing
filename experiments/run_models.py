@@ -15,19 +15,19 @@ from ddr_learning_helpers import routing_baselines
 from ddr_learning_helpers.runs import *
 
 
-def run_model(env_name: str, graph: nx.DiGraph,
-              demands: List[List[Tuple[np.ndarray, float]]], model_path: str,
+def run_model(env_name: str, graphs: List[nx.DiGraph],
+              demands: List[List[List[Tuple[np.ndarray, float]]]], model_path: str,
               replay_steps: int = 10,
               env_kwargs: Dict = {},
               parallelism: int = 4,
               policy_name: str = None):
-    oblivious_routing = routing_baselines.shortest_path_routing(graph)
+    oblivious_routings = [routing_baselines.shortest_path_routing(graph) for graph in graphs]
 
     # make env
     env = lambda: gym.make(env_name,
                            dm_sequence=demands,
-                           graph=graph,
-                           oblivious_routing=oblivious_routing,
+                           graphs=graphs,
+                           oblivious_routings=oblivious_routings,
                            **env_kwargs)
 
     if policy_name == 'lstm':
@@ -90,12 +90,12 @@ if __name__ == "__main__":
     seed(args['seed'])
 
     hyperparameters = read_hyperparameters(args)
-    graph = graph_from_args(args)
-    policy, policy_kwargs = policy_from_args(args, graph)
-    demands = demands_from_args(args, graph)
+    graphs = graphs_from_args(args['graphs'])
+    policy, policy_kwargs = policy_from_args(args, graphs)
+    demands = demands_from_args(args, graphs)
     env_kwargs = env_kwargs_from_args(args)
 
-    result = run_model(args['env'], graph, demands, args['model_path'],
+    result = run_model(args['env'], graphs, demands, args['model_path'],
                        args['replay_steps'], env_kwargs,
                        args['parallelism'], args['policy'])
 
