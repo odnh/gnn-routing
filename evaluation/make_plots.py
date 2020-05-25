@@ -25,89 +25,99 @@ def demo_plot():
     plt.savefig('figure.pgf')
 
 
-def read_results(path: str) -> pd.DataFrame:
+def read_results(test_number: str, policy_name: str) -> pd.DataFrame:
     """
     Reads in a results file, returns a dataframe including ratios
     """
-    df = pd.DataFrame(columns=['policy', 'utilisation', 'opt_utilisation',
-                               'oblivious_utilisation', 'sequence_type', 'graph'])
+    path = 'results/{}-{}'.format(test_number, policy_name)
+
+    df = pd.DataFrame(
+        columns=['utilisation', 'opt_utilisation', 'oblivious_utilisation',
+                 'sequence_type', 'graph'])
     with jsonlines.open(path) as f:
         for result in f:
-            policy = result['policy']
             sequence_type = result['sequence_type']
             graph = result['graph']
             for i in range(len(result['utilisations'])):
                 df.append(
-                    {'policy': policy, 'utilisation': result['utilisations'][i],
+                    {'utilisation': result['utilisations'][i],
                      'opt_utilisation': result['opt_utilisations'][i],
-                     'oblivious_utilisation': result['oblivious_utilisations'][i],
+                     'oblivious_utilisation': result['oblivious_utilisations'][
+                         i],
                      'sequence_type': sequence_type,
                      'graph': graph
-                })
+                     })
 
+    # to easily separate experiments in plots
+    df['test_number'] = test_number
+    df['policy_name'] = policy_name
     # calculate ratios
-    df1 = df.copy()
-    df1['ratio'] = df1['utilisation'] / df1['opt_utilisation']
-    df1['strategy'] = 'agent'
-    df2 = df.copy()
-    df2['ratio'] = df1['oblivious_utilisation'] / df1['opt_utilisation']
-    df2['strategy'] = 'oblivious'
+    df['ratio'] = df['utilisation'] / df['opt_utilisation']
+    df['oblivious_ratio'] = df['oblivious_utilisation'] / df['opt_utilisation']
 
-    return pd.concat(df1, df2)
+    return df
 
 
 def plot_exp1():
     """Generate plots for exp1"""
-    # labels = ['MLP', 'LSTM', 'GNN', 'Iterative']
-    files = ['results/1.{}-{}'.format(exp, pol) for exp in [1, 2] for pol in ['mlp', 'lstm', 'iter']]
-    results = [read_results(file) for file in files]
+    tests = [(test_number, policy_name) for test_number in ['1.1', '1.2'] for
+             policy_name in ['mlp', 'lstm', 'gnn', 'iter']]
+    results = [read_results(*test) for test in tests]
     df = pd.concat(results)
 
     plt.clf()
-    sns.boxplot(y='ratio', x='policy', data=df, palette="colorblind", hue='strategy')
+    sns.boxplot(y='ratio', x='policy_name', data=df, palette='colorblind',
+                hue='test_number')
+    sns.lineplot(y='oblivious_ratio', x='policy_name', data=df,
+                 palette='colorblind', hue='test_number', markers=False)
     plt.savefig('plots/exp1.pgf')
 
 
 def plot_exp2():
     """Generate plots for exp2"""
-    # labels = ['MLP', 'LSTM', 'GNN', 'Iterative']
-    files = ['results/2.{}-{}'.format(exp, pol) for exp in [1, 2, 3, 4] for pol in ['mlp', 'lstm', 'iter']]
-    results = [read_results(file) for file in files]
+    tests = [(test_number, policy_name) for test_number in
+             ['2.1', '2.2', '2.3', '2.4'] for
+             policy_name in ['mlp', 'lstm', 'gnn', 'iter']]
+    results = [read_results(*test) for test in tests]
     df = pd.concat(results)
 
-    # TODO: change the hue field to get more separation
     plt.clf()
-    sns.boxplot(y='ratio', x='policy', data=df, palette="colorblind", hue='strategy')
+    sns.boxplot(y='ratio', x='policy_name', data=df, palette='colorblind',
+                hue='test_number')
+    sns.lineplot(y='oblivious_ratio', x='policy_name', data=df,
+                 palette='colorblind', hue='test_number', markers=False)
     plt.savefig('plots/exp2.pgf')
 
 
 def plot_exp3():
     """Generate plots for exp1"""
-    # labels = ['MLP', 'LSTM', 'GNN', 'Iterative']
-    files = ['results/2.{}-{}'.format(exp, pol) for exp in [1, 2, 3, 4] for pol
-             in ['mlp', 'lstm', 'iter']]
-    results = [read_results(file) for file in files]
+    tests = [(test_number, policy_name) for test_number in
+             ['3.1', '3.2', '3.3', '3.4', '3.5', '3.6'] for
+             policy_name in ['gnn', 'iter']]
+    results = [read_results(*test) for test in tests]
     df = pd.concat(results)
 
     plt.clf()
-    sns.boxplot(y='ratio', x='policy', data=df, palette="colorblind",
-                       hue='strategy')
-    plt.savefig('plots/exp1.pgf')
+    sns.boxplot(y='ratio', x='policy_name', data=df, palette='colorblind',
+                hue='test_number')
+    sns.lineplot(y='oblivious_ratio', x='policy_name', data=df,
+                 palette='colorblind', hue='test_number', markers=False)
+    plt.savefig('plots/exp3.pgf')
 
 
 def plot_exp4():
     """Generate plots for exp1"""
-    # labels = ['MLP', 'LSTM', 'GNN', 'Iterative']
-    files = ['results/2.{}-{}'.format(exp, pol) for exp in [1, 2, 3, 4] for pol
-             in ['mlp', 'lstm', 'iter']]
-    results = [read_results(file) for file in files]
+    tests = [(test_number, policy_name) for test_number in ['4.1'] for
+             policy_name in ['mlp', 'lstm', 'gnn', 'iter']]
+    results = [read_results(*test) for test in tests]
     df = pd.concat(results)
 
-
     plt.clf()
-    sns.boxplot(y='ratio', x='policy', data=df, palette="colorblind",
-                       hue='strategy')
-    plt.savefig('plots/exp1.pgf')
+    sns.boxplot(y='ratio', x='policy_name', data=df, palette='colorblind',
+                hue='test_number')
+    sns.lineplot(y='oblivious_ratio', x='policy_name', data=df,
+                 palette='colorblind', hue='test_number', markers=False)
+    plt.savefig('plots/exp4.pgf')
 
 
 if __name__ == '__main__':
