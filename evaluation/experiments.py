@@ -2,6 +2,8 @@
 Script to run experiments. All configuration is in code because its much easier
 and less effort than the yaml hierarchy I was using before.
 """
+import multiprocessing
+
 from ddr_learning_helpers.runs import run_training, run_model
 
 # base definitions for each policy type
@@ -196,5 +198,6 @@ def run_experiments():
 
 
 if __name__ == '__main__':
+    multiprocessing.set_start_method('spawn')
     train_models()
     run_experiments()

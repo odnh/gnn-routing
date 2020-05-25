@@ -212,8 +212,6 @@ def seed(seed: int):
 def run_training(config: Dict):
     # TODO: give this a bit of a cleanup
     """Runs training based on config passed in"""
-    multiprocessing.set_start_method('spawn')
-
     print("Run configuration:")
     print(config)
     seed(config['seed'])
@@ -293,8 +291,6 @@ def run_training(config: Dict):
 def run_model(config: Dict):
     # TODO: give this a bit of a cleanup
     """Runs test on a model based on config passed in"""
-    multiprocessing.set_start_method('spawn')
-
     print("Run configuration:")
     print(config)
     seed(config['seed'])
