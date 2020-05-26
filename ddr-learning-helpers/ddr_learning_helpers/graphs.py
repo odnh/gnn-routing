@@ -92,7 +92,7 @@ def from_graphspec(graphspec: str) -> nx.DiGraph:
     name = parsed[0]
     graph = topologyzoo(name, weight)
     if len(parsed) > 1:
-        seed = parsed[3]
+        seed = int(parsed[3])
         random_state = np.random.RandomState(seed)
         if parsed[1] == 'e':
             if parsed[2] == '+':

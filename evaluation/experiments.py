@@ -34,7 +34,7 @@ train = {
         {
             'memory_length': 1,
             'graphs': ['Abilene'],
-            'timesteps': 500000,
+            'timesteps': 100,
             'sequence_type': 'cyclical',
             'demand_seeds': [2],
             'cycle_length': 1,
@@ -51,7 +51,7 @@ train = {
         {
             'memory_length': 10,
             'graphs': ['Abilene'],
-            'timesteps': 500000,
+            'timesteps': 100,
             'sequence_type': 'cyclical',
             'demand_seeds': [1, 2, 3, 4, 5],
             'cycle_length': 5,
@@ -67,9 +67,9 @@ train = {
     '3':
         {
             'memory_length': 10,
-            'graphs': ["Abilene", "Abilene:e+:1", "Abilene:e-:1",
-                       "Abilene:n+:1", "Abilene:n-:1"],
-            'timesteps': 500000,
+            'graphs': ["Abilene", "Abilene:e:+:1", "Abilene:e:-:1",
+                "Abilene:n:+:1", "Abilene:n:-:1"],
+            'timesteps': 100,
             'sequence_type': 'cyclical',
             'demand_seeds': [1, 2, 3, 4, 5],
             'cycle_length': 5,
@@ -86,7 +86,7 @@ train = {
         {
             'memory_length': 10,
             'graphs': ["Abilene"],
-            'timesteps': 500000,
+            'timesteps': 100,
             'sequence_type': 'cyclical',
             'demand_seeds': [1, 2, 3, 4, 5],
             'cycle_length': 5,
@@ -131,19 +131,19 @@ test = {
             'replay_steps': 6
         },
         '2': {
-            'graphs': 'Abilene:e:-:2',
+            'graphs': ['Abilene:e:-:2'],
             'replay_steps': 6
         },
         '3': {
-            'graphs': 'Abilene:e:+:2',
+            'graphs': ['Abilene:e:+:2'],
             'replay_steps': 6
         },
         '4': {
-            'graphs': 'Abilene:n:-:2',
+            'graphs': ['Abilene:n:-:2'],
             'replay_steps': 6
         },
         '5': {
-            'graphs': 'Abilene:n:+:2',
+            'graphs': ['Abilene:n:+:2'],
             'replay_steps': 6
         },
         '6': {

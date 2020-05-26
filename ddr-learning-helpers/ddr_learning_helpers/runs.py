@@ -252,39 +252,14 @@ def run_training(config: Dict):
 
     # learn
     if env_name == 'ddr-iterative-v0':
-        model.learn(total_timesteps=timesteps, tb_log_name=log_name,
-                    callback=true_reward_callback)
+        model.learn(total_timesteps=timesteps, tb_log_name=log_name)
     else:
         model.learn(total_timesteps=timesteps, tb_log_name=log_name)
 
     # save it
     model.save(model_name)
 
-    # try it out
-    obs = vec_env.reset()
-    state = None
-    total_rewards = 0
-    if env_name == 'ddr-iterative-v0':
-        reward_inc = 0
-        for i in range(replay_steps - 1):
-            action, state = model.predict(obs, state=state,
-                                          deterministic=True)
-            obs, reward, done, info = vec_env.step(action)
-            print(reward)
-            print(info)
-            if sum(info[0]['edge_set']) == 0:
-                reward_inc += 1
-                total_rewards += info[0]['real_reward']
-        print("Mean reward: ", total_rewards / reward_inc)
-    else:
-        for i in range(replay_steps - 1):
-            action, state = model.predict(obs, state=state,
-                                          deterministic=True)
-            obs, reward, done, info = vec_env.step(action)
-            print(reward)
-            print(info)
-            total_rewards += reward[0]
-        print("Mean reward: ", total_rewards / (replay_steps - 1))
+    # make sure everything stopped correctly
     vec_env.close()
 
 
