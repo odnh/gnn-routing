@@ -128,6 +128,10 @@ def env_kwargs_from_args(args: Dict) -> Dict:
     env_kwargs = {}
     if 'memory_length' in args:
         env_kwargs['dm_memory_length'] = args['memory_length']
+    if 'graph_indices' in args:
+        env_kwargs['graph_indices'] = args['graph_indices']
+    else:
+        env_kwargs['graph_indices'] = list(range(len(args['graphs'])))
     return env_kwargs
 
 
@@ -228,7 +232,6 @@ def run_training(config: Dict):
     timesteps = config['timesteps']
     parallelism = config['parallelism']
     log_name = config['log_name']
-    replay_steps = config['replay_steps']
     model_name = config['model_name']
     tensorboard_log = config['tensorboard_log']
 

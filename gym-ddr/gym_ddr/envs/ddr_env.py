@@ -45,6 +45,7 @@ class DDREnv(gym.Env):
                  dm_sequence: List[List[List[Tuple[Demand, float]]]],
                  dm_memory_length: int,
                  graphs: List[nx.DiGraph],
+                 graph_indices: List[int],
                  oblivious_routings: List[np.ndarray] = None):
         """
         Args:
@@ -52,8 +53,9 @@ class DDREnv(gym.Env):
                        of dm sequences where each dm in the sequence is a tuple
                        of demand matrix and optimal max-link-utilisation
           dm_memory_length: the length of the dm history we should train on
-          graph: the graph we will be routing over
-          oblivious_routing: an oblivious routing
+          graphs: the graphs we will be routing over
+          graph_indices: the subset of graphs to be used from he list
+          oblivious_routings: oblivious routings for graphs
         """
         self.dm_sequence = dm_sequence
         self.dm_index = 0  # index of the dm within a sequence we are on
@@ -61,7 +63,8 @@ class DDREnv(gym.Env):
         self.dm_memory_length = dm_memory_length
         self.dm_memory: List[Demand] = []
         self.graphs = graphs
-        self.graph_index = 0
+        self.graph_indices = graph_indices
+        self.graph_index = graph_indices[0]
         self.done = False
 
         self.max_nodes = max([graph.number_of_nodes() for graph in graphs])
@@ -134,7 +137,8 @@ class DDREnv(gym.Env):
         # first choose a random dm sequence
         self.dm_sequence_index = np.random.randint(0, len(self.dm_sequence[0]))
         # and equivalently as random graph
-        self.graph_index = np.random.randint(0, len(self.graphs))
+        self.graph_index = self.graph_indices[
+            np.random.randint(0, len(self.graph_indices))]
         # then place us at the start of that sequence
         self.dm_index = 0
         # pre-fill the memory from the sequence (backwards to queue works
@@ -684,8 +688,8 @@ class DDREnvIterative(DDREnvSoftmin):
             else:
                 # still in dm sequence so update the memory by appending new dm
                 new_dm = \
-                self.dm_sequence[self.graph_index][self.dm_sequence_index][
-                    self.dm_index]
+                    self.dm_sequence[self.graph_index][self.dm_sequence_index][
+                        self.dm_index]
                 self.dm_memory.append(new_dm)
                 if len(self.dm_memory) > self.dm_memory_length:
                     self.dm_memory.pop(0)
@@ -699,7 +703,8 @@ class DDREnvIterative(DDREnvSoftmin):
         # first choose a random dm sequence
         self.dm_sequence_index = np.random.randint(0, len(self.dm_sequence[0]))
         # and equivalently a random graph
-        self.graph_index = np.random.randint(0, len(self.graphs))
+        self.graph_index = self.graph_indices[
+            np.random.randint(0, len(self.graph_indices))]
         # then place us at the start of that sequence
         self.dm_index = 0
         # pre-fill the memory from the sequence
@@ -766,7 +771,8 @@ class DDREnvIterative(DDREnvSoftmin):
         # combine node and edge info
         observation = np.concatenate((demands_history, iter_info))
         # pad up to max size
-        observation = np.pad(observation, [0, self.observation_space.shape[0] - observation.size])
+        observation = np.pad(observation, [0, self.observation_space.shape[
+            0] - observation.size])
         return observation
 
     def get_data_dict(self) -> Dict:

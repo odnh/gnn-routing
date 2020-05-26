@@ -68,7 +68,10 @@ train = {
         {
             'memory_length': 10,
             'graphs': ["Abilene", "Abilene:e:+:1", "Abilene:e:-:1",
-                "Abilene:n:+:1", "Abilene:n:-:1"],
+                       "Abilene:n:+:1", "Abilene:n:-:1", "Abilene:e:+:2",
+                       "Abilene:e:-:2", "Abilene:n:+:2", "Abilene:n:-:2",
+                       "BtEurope"],
+            'graph_indices': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
             'timesteps': 100,
             'sequence_type': 'cyclical',
             'demand_seeds': [1, 2, 3, 4, 5],
@@ -85,11 +88,11 @@ train = {
     '4':
         {
             'memory_length': 10,
-            'graphs': ["Abilene"],
+            'graphs': ["totem"],
             'timesteps': 100,
-            'sequence_type': 'cyclical',
+            'sequence_type': 'totem',
             'demand_seeds': [1, 2, 3, 4, 5],
-            'cycle_length': 5,
+            'cycle_length': 0,
             'sparsity': 0.0,
             'sequence_length': 6,
             'seed': 1,
@@ -132,27 +135,35 @@ test = {
         },
         '2': {
             'graphs': ['Abilene:e:-:2'],
+            'graph_indices': [5],
             'replay_steps': 6
         },
         '3': {
             'graphs': ['Abilene:e:+:2'],
+            'graph_indices': [6],
             'replay_steps': 6
         },
         '4': {
             'graphs': ['Abilene:n:-:2'],
+            'graph_indices': [7],
             'replay_steps': 6
         },
         '5': {
             'graphs': ['Abilene:n:+:2'],
+            'graph_indices': [8],
             'replay_steps': 6
         },
         '6': {
             'graphs': 'BtEurope',
+            'graph_indices': [9],
             'replay_steps': 6
         }
     },
     '4': {
-        '1': {}
+        '1': {
+            'demand_seeds': [6],
+            'replay_steps': 6
+        }
     }
 }
 
@@ -160,7 +171,7 @@ test = {
 # functions to train and run
 def run_experiment(spec_id: str, policy_id: str, test_id: str):
     """Run a specific experiment. Model must already be trained"""
-    model_path  = "models/{}-{}"    .format(spec_id, policy_id)
+    model_path = "models/{}-{}".format(spec_id, policy_id)
     output_path = "results/{}.{}-{}".format(spec_id, test_id, policy_id)
     config = {**train[spec_id],
               **test[spec_id][test_id],
