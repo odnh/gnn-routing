@@ -173,8 +173,8 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
                                                     num_edges_per_batch)
     # make a normal tensor so we can slice out edge values
     output_edges = output_edges.to_tensor()
-    # then extract from each split the values we want
-    output_edges = tf.squeeze(output_edges[:, :, 0::layer_size])
+    # then extract from each split the values we want and squeeze away last axis
+    output_edges = tf.squeeze(output_edges[:, :, 0::layer_size], axis=2)
     # finally pad to correct size for output
     output_edges = tf.pad(output_edges, [[0, 0], [0, max_edges_len -
                                                   tf.shape(output_edges)[1]]])
