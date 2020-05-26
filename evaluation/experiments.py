@@ -134,27 +134,22 @@ test = {
             'replay_steps': 6
         },
         '2': {
-            'graphs': ['Abilene:e:-:2'],
             'graph_indices': [5],
             'replay_steps': 6
         },
         '3': {
-            'graphs': ['Abilene:e:+:2'],
             'graph_indices': [6],
             'replay_steps': 6
         },
         '4': {
-            'graphs': ['Abilene:n:-:2'],
             'graph_indices': [7],
             'replay_steps': 6
         },
         '5': {
-            'graphs': ['Abilene:n:+:2'],
             'graph_indices': [8],
             'replay_steps': 6
         },
         '6': {
-            'graphs': 'BtEurope',
             'graph_indices': [9],
             'replay_steps': 6
         }

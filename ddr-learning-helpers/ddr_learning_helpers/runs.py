@@ -277,8 +277,8 @@ def run_model(config: Dict):
 
     # read config
     graphs = graphs_from_args(config['graphs'])
-    policy_name = config['policy_name']
-    model_path = config['model_path']
+    policy_name = config['policy']
+    model_path = config['model_name']
     demands = demands_from_args(config, graphs)
     env_kwargs = env_kwargs_from_args(config)
     env_name = config['env_name']
