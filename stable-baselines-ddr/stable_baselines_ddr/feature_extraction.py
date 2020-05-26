@@ -7,8 +7,6 @@ from graph_nets.graphs import GraphsTuple
 from stable_baselines.a2c.utils import linear
 from stable_baselines.common.tf_layers import ortho_init, _ln
 from stable_baselines_ddr.graph_nets import DDRGraphNetwork
-from stable_baselines_ddr.tensor_transformations import repeat_inner_dim, \
-    repeat_outer_dim
 
 
 def vf_builder(vf_arch: str, graphs: List[nx.DiGraph], latent: tf.Tensor,

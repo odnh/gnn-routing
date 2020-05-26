@@ -109,7 +109,7 @@ def full() -> nx.OrderedDiGraph:
     """Small-ish fully-connected graph"""
     graph = nx.complete_graph(5, nx.OrderedDiGraph)
     for src, dst in graph.edges():
-        graph[src][dst] = 10000
+        graph[src][dst]['weight'] = 5000
     return graph
 
 
@@ -121,7 +121,6 @@ def from_graphspec(graphspec: str) -> nx.DiGraph:
     weight = 10000
     parsed = graphspec.split(":")
     name = parsed[0]
-    graph = topologyzoo(name, weight)
 
     # overrides for non-topologyzoo graphs
     if name == 'basic':
@@ -129,10 +128,12 @@ def from_graphspec(graphspec: str) -> nx.DiGraph:
     elif name == 'basic2':
         graph = basic2()
     elif name == 'totem':
-        t = totem.Totem(weight=10000)
+        t = totem.Totem(weight=weight)
         graph = t.graph
     elif name == 'full':
         graph = full()
+    else:
+        graph = topologyzoo(name, weight)
 
     # graphspec allows edges and nodes to be dropped or added
     if len(parsed) > 1:
