@@ -106,49 +106,56 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     latent_value``
     """
     # get graph info
-    sorted_edges_list = [sorted(network_graph.edges()) for network_graph in network_graphs]
+    sorted_edges_list = [sorted(network_graph.edges()) for network_graph in
+                         network_graphs]
     num_edges_list = [len(l) for l in sorted_edges_list]
+    num_nodes_list = [network_graph.number_of_nodes() for network_graph in
+                      network_graphs]
     max_edges_len = max(num_edges_list)
-    sorted_edges_list = [edges + [(0, 0)] * (max_edges_len - len(edges)) for edges in sorted_edges_list]
+    sorted_edges_list = [edges + [(0, 0)] * (max_edges_len - len(edges)) for
+                         edges in sorted_edges_list]
     sorted_edges = tf.constant(sorted_edges_list)
     num_edges = tf.constant(num_edges_list)
-    num_nodes = tf.constant( [network_graph.number_of_nodes() for network_graph in network_graphs])
+    num_nodes = tf.constant(num_nodes_list)
 
+    # start manipulating input data
     latent = flat_observations
-    graph_idx = tf.cast(latent[0, 0], np.int32)  # specify which graph to use (need to ensure only max one graph per batch)
-    obs_mask_end = num_nodes[graph_idx] * dm_memory_length * 2 + 1
-    observation = latent[:, 1:obs_mask_end]  # actual observation
     num_batches = tf.shape(latent)[0]
 
-    # slice the data dimension to split the edge and node features
-    node_features = tf.reshape(observation, [-1, 2 * dm_memory_length],
+    # prepare helper data for graphs per entry in batch
+    graph_idxs = tf.cast(latent[:, 0], np.int32)
+    num_nodes_per_batch = tf.map_fn(lambda i: num_nodes[i], graph_idxs)
+    num_edges_per_batch = tf.map_fn(lambda i: num_edges[i], graph_idxs)
+    observation_sizes = tf.multiply(num_nodes_per_batch, dm_memory_length * 2)
+    full_observations = latent[:, 1:]
+    trimmed_observations = tf.RaggedTensor.from_tensor(full_observations,
+                                                       lengths=observation_sizes)
+
+    # reshape data into correct sizes for gnn input
+    node_features = tf.reshape(trimmed_observations.flat_values,
+                               [-1, 2 * dm_memory_length],
                                name="node_feat_input")
-    node_features = tf.pad(node_features, tf.constant(
-        [[0, 0], [0, layer_size - (2 * dm_memory_length)]], dtype=np.int32))
+    node_features = tf.pad(node_features,
+                           [[0, 0], [0, layer_size - (2 * dm_memory_length)]])
 
     # initialise unused input features to all zeros
-    edge_features = tf.repeat(
-        tf.constant(np.zeros((1, layer_size)), np.float32),
-        num_batches * num_edges[graph_idx], axis=0)
-    global_features = tf.repeat(
-        tf.constant(np.zeros((1, layer_size)), np.float32),
-        num_batches, axis=0)
+    edge_features = tf.zeros((tf.reduce_sum(num_edges_per_batch), layer_size),
+                             np.float32)
+    global_features = tf.zeros((num_batches, layer_size), np.float32)
 
     # repeat edge information across batches and flattened for graph_nets
-    sender_nodes = tf.reshape(
-        tf.tile(tf.expand_dims(sorted_edges[graph_idx][:num_edges[graph_idx], 0], axis=0),
-                tf.stack([num_batches, 1])), [-1])
-    receiver_nodes = tf.reshape(
-        tf.tile(tf.expand_dims(sorted_edges[graph_idx][:num_edges[graph_idx], 1], axis=0),
-                tf.stack([num_batches, 1])), [-1])
+    sender_nodes = tf.map_fn(lambda i: sorted_edges[i][:, 0], graph_idxs)
+    sender_nodes = tf.RaggedTensor.from_tensor(sender_nodes,
+                                               lengths=num_edges_per_batch)
+    sender_nodes = sender_nodes.flat_values
+    receiver_nodes = tf.map_fn(lambda i: sorted_edges[i][:, 1], graph_idxs)
+    receiver_nodes = tf.RaggedTensor.from_tensor(receiver_nodes,
+                                                 lengths=num_edges_per_batch)
+    receiver_nodes = receiver_nodes.flat_values
 
     # repeat graph information across batches and flattened for graph_nets
-    n_node_list = tf.reshape(
-        repeat_inner_dim(num_nodes[graph_idx, tf.newaxis, tf.newaxis],
-                         num_batches), [-1])
-    n_edge_list = tf.reshape(
-        repeat_inner_dim(num_edges[graph_idx, tf.newaxis, tf.newaxis],
-                         num_batches), [-1])
+    n_node_list = num_nodes_per_batch
+    n_edge_list = num_edges_per_batch
 
     input_graph = GraphsTuple(nodes=node_features,
                               edges=edge_features,
@@ -163,18 +170,21 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
 
     # NB: reshape needs num_edges as otherwise output tensor has too many
     #     unknown dims
-    output_edges = tf.reshape(output_graph.edges,
-                              tf.stack([-1, num_edges[graph_idx] * layer_size]))
-    output_edges = output_edges[:, 0::layer_size]
-    # and pad to max action size
-    output_edges = tf.pad(output_edges,
-                          [[0, 0], [0, max_edges_len - num_edges[graph_idx]]])
+    # first split per graph
+    output_edges = tf.RaggedTensor.from_row_lengths(output_graph.edges,
+                                                    num_edges_per_batch)
+    # make a normal tensor so we can slice out edge values
+    output_edges = output_edges.to_tensor()
+    # then extract from each split the values we want
+    output_edges = tf.squeeze(output_edges[:, :, 0::layer_size])
+    # finally pad to correct size for output
+    output_edges = tf.pad(output_edges, [[0, 0], [0, max_edges_len -
+                                                  tf.shape(output_edges)[1]]])
 
     # global output is softmin gamma
-    output_globals = tf.reshape(output_graph.globals,
-                                tf.constant([-1, layer_size]))
+    output_globals = tf.reshape(output_graph.globals, (-1, layer_size))
     output_globals = output_globals[:, 0]
-    output_globals = tf.reshape(output_globals, tf.constant([-1, 1]))
+    output_globals = tf.reshape(output_globals, (-1, 1))
 
     latent_policy_gnn = tf.concat([output_edges, output_globals], axis=1)
     # build value function network
@@ -202,60 +212,64 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     latent_value``
     """
     # get graph info
-    sorted_edges_list = [sorted(network_graph.edges()) for network_graph in network_graphs]
+    sorted_edges_list = [sorted(network_graph.edges()) for network_graph in
+                         network_graphs]
     num_edges_list = [len(l) for l in sorted_edges_list]
+    num_nodes_list = [network_graph.number_of_nodes() for network_graph in
+                      network_graphs]
     max_edges_len = max(num_edges_list)
-    sorted_edges_list = [edges + [(0, 0)] * (max_edges_len - len(edges)) for edges in sorted_edges_list]
+    sorted_edges_list = [edges + [(0, 0)] * (max_edges_len - len(edges)) for
+                         edges in sorted_edges_list]
     sorted_edges = tf.constant(sorted_edges_list)
     num_edges = tf.constant(num_edges_list)
-    num_nodes = tf.constant([network_graph.number_of_nodes() for network_graph in network_graphs])
+    num_nodes = tf.constant(num_nodes_list)
 
+    # start manipulating the input
     latent = flat_observations
-    graph_idx = tf.cast(latent[0, 0], np.int32)  # specify which graph to use (need to ensure only max one graph per batch)
-    obs_mask_end = (num_nodes[graph_idx] * dm_memory_length * 2) + (num_edges[graph_idx] * 2) + 1
-    observation = latent[:, 1:obs_mask_end]  # actual observation
     num_batches = tf.shape(latent)[0]
 
-    # slice the data dimension to split the edge and node features
-    node_features_slice = tf.slice(observation, [0, 0],
-                                   [-1, num_nodes[graph_idx] * 2 * dm_memory_length])
-    edge_features_slice = tf.slice(observation,
-                                   [0, num_nodes[graph_idx] * 2 * dm_memory_length],
-                                   [-1, -1])
+    # prepare helper data for graphs per entry in batch
+    graph_idxs = tf.cast(latent[:, 0], np.int32)
+    num_nodes_per_batch = tf.map_fn(lambda i: num_nodes[i], graph_idxs)
+    num_edges_per_batch = tf.map_fn(lambda i: num_edges[i], graph_idxs)
+    observation_sizes = tf.multiply(num_nodes_per_batch, dm_memory_length * 2) + tf.multiply(num_edges_per_batch, 2)
+    full_observations = latent[:, 1:]
+    trimmed_observations = tf.RaggedTensor.from_tensor(full_observations,
+                                                       lengths=observation_sizes)
 
-    # reshape node features to flat batches but still vector in dim 1 per node
-    node_features = tf.reshape(node_features_slice,
-                               [-1, 2 * dm_memory_length],
-                               name="node_feat_input")
-    node_features = tf.pad(node_features, tf.constant(
-        [[0, 0], [0, layer_size - (2 * dm_memory_length)]], dtype=np.int32))
-    # reshape edge features to flat batches but vector in dim 1 per edge
-    edge_features = tf.reshape(edge_features_slice, [-1, 2],
-                               name="edge_feat_input")
-    edge_features = tf.pad(edge_features,
-                           tf.constant([[0, 0], [0, layer_size - 2]],
-                                       dtype=np.int32))
+    # slice apart the node and edge features in each seciton of batch
+    node_observation_sizes = tf.multiply(num_nodes_per_batch, dm_memory_length * 2)
+    edge_observation_sizes = tf.multiply(num_edges_per_batch, 2)
+    interleaved_lengths = tf.reshape(tf.stack([node_observation_sizes, edge_observation_sizes], axis=1), [-1])
+    flattened_observations = trimmed_observations.flat_values
+    interleaved_observations = tf.RaggedTensor.from_row_lengths(flattened_observations, interleaved_lengths)
+    node_features_slice = interleaved_observations[::2].flat_values
+    edge_features_slice = interleaved_observations[1::2].flat_values
+
+    # reshape and pad for input to gnn
+    node_features = tf.reshape(node_features_slice, [-1, 2 * dm_memory_length])
+    node_features = tf.pad(node_features,
+                           [[0, 0], [0, layer_size - (2 * dm_memory_length)]])
+
+    edge_features = tf.reshape(edge_features_slice, [-1, 2])
+    edge_features = tf.pad(edge_features, [[0, 0], [0, layer_size - 2]])
 
     # initialise global input features to zeros (as are unused)
-    global_features = tf.repeat(
-        tf.constant(np.zeros((1, layer_size)), np.float32),
-        num_batches, axis=0)
+    global_features = tf.zeros((num_batches, layer_size), np.float32)
 
     # repeat edge information across batches and flattened for graph_nets
-    sender_nodes = tf.reshape(
-        tf.tile(tf.expand_dims(sorted_edges[graph_idx][:num_edges[graph_idx], 0], axis=0),
-                tf.stack([num_batches, 1])), [-1])
-    receiver_nodes = tf.reshape(
-        tf.tile(tf.expand_dims(sorted_edges[graph_idx][:num_edges[graph_idx], 1], axis=0),
-                tf.stack([num_batches, 1])), [-1])
+    sender_nodes = tf.map_fn(lambda i: sorted_edges[i][:, 0], graph_idxs)
+    sender_nodes = tf.RaggedTensor.from_tensor(sender_nodes,
+                                               lengths=num_edges_per_batch)
+    sender_nodes = sender_nodes.flat_values
+    receiver_nodes = tf.map_fn(lambda i: sorted_edges[i][:, 1], graph_idxs)
+    receiver_nodes = tf.RaggedTensor.from_tensor(receiver_nodes,
+                                                 lengths=num_edges_per_batch)
+    receiver_nodes = receiver_nodes.flat_values
 
     # repeat graph information across batches and flattened for graph_nets
-    n_node_list = tf.reshape(
-        repeat_inner_dim(num_nodes[graph_idx, tf.newaxis, tf.newaxis],
-                         num_batches), [-1])
-    n_edge_list = tf.reshape(
-        repeat_inner_dim(num_edges[graph_idx, tf.newaxis, tf.newaxis],
-                         num_batches), [-1])
+    n_node_list = num_nodes_per_batch
+    n_edge_list = num_edges_per_batch
 
     input_graph = GraphsTuple(nodes=node_features,
                               edges=edge_features,
