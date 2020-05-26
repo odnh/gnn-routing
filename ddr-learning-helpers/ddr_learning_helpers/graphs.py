@@ -128,7 +128,7 @@ def from_graphspec(graphspec: str) -> nx.DiGraph:
     elif name == 'basic2':
         graph = basic2()
     elif name == 'totem':
-        t = totem.Totem(weight=100000)
+        t = totem.Totem(weight=1000000)
         graph = t.graph
     elif name == 'full':
         graph = full()
