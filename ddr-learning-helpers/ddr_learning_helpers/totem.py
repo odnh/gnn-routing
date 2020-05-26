@@ -90,7 +90,7 @@ class Totem:
     def get_demands(self, start_date: datetime, end_date: datetime)\
             -> Iterator[Demand]:
         """
-        Reads in the demand cml files from data folder. As data is in 15 minute
+        Reads in the demand xml files from data folder. As data is in 15 minute
         intervals this is what while be returned.
         Args:
             start_date: start datetime (not before 2005-01-01-00-30)

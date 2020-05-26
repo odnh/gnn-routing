@@ -4,7 +4,6 @@ training rom the command line.
 """
 import argparse
 import json
-import multiprocessing
 import os
 from typing import List, Dict, Tuple
 
@@ -72,6 +71,9 @@ def demands_from_args(args: Dict, graphs: List[nx.DiGraph]) -> List[List[
                 lambda rs_l: dm.bimodal_demand(num_demands, rs_l),
                 sequence_length, args['cycle_length'], args['sparsity'],
                 seed=seed)
+        elif args['sequence_type'] == "totem":
+            dm_generator_getter = lambda seed: dm.totem_sequence(
+                sequence_length, seed=seed)
         else:
             raise Exception("No such sequence type")
 

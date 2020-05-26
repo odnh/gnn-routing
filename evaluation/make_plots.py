@@ -90,7 +90,7 @@ def plot_exp2():
 
 
 def plot_exp3():
-    """Generate plots for exp1"""
+    """Generate plots for exp3"""
     tests = [(test_number, policy_name) for test_number in
              ['3.1', '3.2', '3.3', '3.4', '3.5', '3.6'] for
              policy_name in ['gnn', 'iter']]
@@ -106,7 +106,7 @@ def plot_exp3():
 
 
 def plot_exp4():
-    """Generate plots for exp1"""
+    """Generate plots for exp4"""
     tests = [(test_number, policy_name) for test_number in ['4.1'] for
              policy_name in ['mlp', 'lstm', 'gnn', 'iter']]
     results = [read_results(*test) for test in tests]

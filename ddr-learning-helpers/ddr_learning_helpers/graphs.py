@@ -2,6 +2,7 @@ import pathlib
 
 import networkx as nx
 import numpy as np
+from ddr_learning_helpers import totem
 
 
 def random(num_nodes: int,
@@ -58,7 +59,7 @@ def topologyzoo(graph_name: str, weight: int) -> nx.OrderedDiGraph:
 
 def basic() -> nx.OrderedDiGraph:
     """
-    Very simple graph for testing
+    Fairly simple graph for testing
     Returns:
         A simple graph
     """
@@ -82,6 +83,36 @@ def basic() -> nx.OrderedDiGraph:
     graph.add_edge(5, 4, weight=5000)
     return graph
 
+
+def basic2() -> nx.OrderedDiGraph:
+    """
+    Very simple graph for testing
+    Returns:
+        A simple graph
+    """
+    graph = nx.OrderedDiGraph()
+    graph.add_nodes_from([0, 1, 2, 3])
+    graph.add_edge(0, 1, weight=5000)
+    graph.add_edge(1, 0, weight=5000)
+    graph.add_edge(0, 2, weight=5000)
+    graph.add_edge(2, 0, weight=5000)
+    graph.add_edge(0, 3, weight=5000)
+    graph.add_edge(3, 0, weight=5000)
+    graph.add_edge(1, 2, weight=5000)
+    graph.add_edge(2, 1, weight=5000)
+    graph.add_edge(2, 3, weight=5000)
+    graph.add_edge(3, 2, weight=5000)
+    return graph
+
+
+def full() -> nx.OrderedDiGraph:
+    """Small-ish fully-connected graph"""
+    graph = nx.complete_graph(5, nx.OrderedDiGraph)
+    for src, dst in graph.edges():
+        graph[src][dst] = 10000
+    return graph
+
+
 def from_graphspec(graphspec: str) -> nx.DiGraph:
     """
     graphspec: topologyzooname:n/e:+/-:seed
@@ -91,6 +122,19 @@ def from_graphspec(graphspec: str) -> nx.DiGraph:
     parsed = graphspec.split(":")
     name = parsed[0]
     graph = topologyzoo(name, weight)
+
+    # overrides for non-topologyzoo graphs
+    if name == 'basic':
+        graph = basic()
+    elif name == 'basic2':
+        graph = basic2()
+    elif name == 'totem':
+        t = totem.Totem(weight=10000)
+        graph = t.graph
+    elif name == 'full':
+        graph = full()
+
+    # graphspec allows edges and nodes to be dropped or added
     if len(parsed) > 1:
         seed = int(parsed[3])
         random_state = np.random.RandomState(seed)
@@ -126,4 +170,5 @@ def from_graphspec(graphspec: str) -> nx.DiGraph:
             raise Exception("Invalid graphspec")
 
         graph = nx.convert_node_labels_to_integers(graph)
+
     return graph

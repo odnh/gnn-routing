@@ -2,6 +2,7 @@ from typing import Type, Callable, Iterator
 
 import networkx as nx
 import numpy as np
+from ddr_learning_helpers.totem import Totem
 from numpy.random import RandomState
 
 Demand = np.ndarray
@@ -157,3 +158,18 @@ def random_sequence(
     random_state = np.random.RandomState(seed=seed)
     for _ in range(length):
         yield sparsify(demand_generator(), sparsity, random_state)
+
+def totem_sequence(sequence_length: int, seed: int) -> Iterator[Demand]:
+    """Returns a sequence from the TOTEM dataset"""
+    t = Totem()
+    start_date = 0
+    end_date = 0
+    """
+    NB:
+        start_date: start datetime (not before 2005-01-01-00-30)
+        end_date: end datetime (not after 2005-04-29-16-45)
+    """
+    # TODO: list of possible start dates given the demand sequence length
+    #       Use seed to randomly choose then set end_date appropriately
+    raise Exception("You still need to implement this Ollie!")
+    return t.get_demands(start_date, end_date)
