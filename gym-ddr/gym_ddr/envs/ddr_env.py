@@ -622,7 +622,7 @@ class DDREnvIterative(DDREnvSoftmin):
         self.iter_length = graphs[0].number_of_edges()
         # the order to set edges during an iteration
         self.edge_order = np.arange(graphs[0].number_of_edges())
-        # np.random.shuffle(self.edge_order) #TODO: uncomment
+        np.random.shuffle(self.edge_order)
         # index into the iteration / which edge to set
         self.iter_idx = 0
         # array of which edges have had their routing set so far
@@ -672,7 +672,7 @@ class DDREnvIterative(DDREnvSoftmin):
             self.edge_set = np.zeros(
                 self.graphs[self.graph_index].number_of_edges(), dtype=float)
             # change order in which we ask for edges to be set
-            # np.random.shuffle(self.edge_order) #TODO: uncomment
+            np.random.shuffle(self.edge_order)
             # zero the routing values (i.e. set to midvalue)
             self.edge_values = np.zeros(
                 self.graphs[self.graph_index].number_of_edges(),
@@ -722,7 +722,7 @@ class DDREnvIterative(DDREnvSoftmin):
         # generalisation)
         self.edge_order = np.arange(
             self.graphs[self.graph_index].number_of_edges())
-        # np.random.shuffle(self.edge_order) #TODO: uncomment
+        np.random.shuffle(self.edge_order)
         self.iter_idx = 0
         self.edge_set = np.zeros(
             self.graphs[self.graph_index].number_of_edges(), dtype=float)

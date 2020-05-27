@@ -64,7 +64,7 @@ def plot_exp1():
 def plot_exp2():
     """Generate plots for exp2"""
     tests = [(test_number, policy_name) for test_number in
-             ['2.1', '2.2'] for
+             ['2.1', '2.2', '2.3', '2.4'] for
              policy_name in ['mlp', 'lstm', 'gnn', 'iter']]
     results = [read_results(*test) for test in tests]
     df = pd.concat(results)
@@ -85,7 +85,7 @@ def plot_exp2():
 def plot_exp3():
     """Generate plots for exp3"""
     tests = [(test_number, policy_name) for test_number in
-             ['3.1', '3.2', '3.3', '3.4', '3.5', '3.6'] for
+             ['3.1'] for
              policy_name in ['gnn', 'iter']]
     results = [read_results(*test) for test in tests]
     df = pd.concat(results)
@@ -105,7 +105,27 @@ def plot_exp3():
 
 def plot_exp4():
     """Generate plots for exp4"""
-    tests = [(test_number, policy_name) for test_number in ['4.1'] for
+    tests = [(test_number, policy_name) for test_number in ['4.1', '4.2'] for
+             policy_name in ['mlp', 'lstm', 'gnn', 'iter']]
+    results = [read_results(*test) for test in tests]
+    df = pd.concat(results)
+
+    plt.clf()
+    sns.boxplot(y='ratio', x='policy_name', data=df, palette='colorblind',
+                hue='test_number')
+
+    # draw oblivious ratio lines
+    oblivious_heights = list(df.groupby('test_number')['oblivious_ratio'].mean())
+    palette = sns.color_palette("colorblind")
+    for i, height in enumerate(oblivious_heights):
+        plt.axhline(height, ls='--', color=palette[i])
+
+    plt.savefig('plots/exp4.pgf')
+
+
+def plot_exp5():
+    """Generate plots for exp5"""
+    tests = [(test_number, policy_name) for test_number in ['5.1'] for
              policy_name in ['mlp', 'lstm', 'gnn', 'iter']]
     results = [read_results(*test) for test in tests]
     df = pd.concat(results)

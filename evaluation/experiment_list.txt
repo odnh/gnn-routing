@@ -1,41 +1,21 @@
 # Experiment List
 
 1: Static routing
-.1: MLP
-.2: GNN
-.3: Iter
-.4: LSTM
-
-.*.1: Same DM
-.*.2: Different DM 
+.1: Same DM
+.2: Different DM
 
 2: DM Regularity
-.1: MLP
-.2: GNN
-.3: Iter
-.4: LSTM
+.1: Bimodal cyclic
+.2: Gravity cyclic
+.3: Bimodal average
+.4: Gravity average
 
-.*.1: Cyclical bimodal
-.*.2: Gravity DMs
+3: DM vary sequence length
+.1: Bimodal cyclic vary length
 
-.*.*.1: In training set
-.*.*.2: Out of training set
+4: Graph generalisation (gnn + iter only)
+.1: Small changes
+.2: Different graphs
 
-3: Graph generalisation
-.2: GNN
-.3: Iter
-
-.*.1: In train set
-.*.2: Drop edge
-.*.3: Add edge
-.*.4: Drop node
-.*.5: Add node
-.*.6: Out of distribution
-
-4: Real-world
-.1: MLP
-.2: GNN
-.3: Iter
-.4: LSTM
-
-.*.1: Abilene data set
+5: Real-world
+.1: Totem data set

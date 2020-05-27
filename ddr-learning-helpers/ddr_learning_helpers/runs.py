@@ -55,30 +55,40 @@ def demands_from_args(args: Dict, graphs: List[nx.DiGraph]) -> List[List[
         # because the first n demands are used to build the history
         sequence_length = args['sequence_length'] + args['memory_length']
 
-        # Select sequence type
+        # select demand type:
+        if args['demand_type'] == 'bimodal':
+            dm_getter = lambda rs_l: dm.bimodal_demand(num_demands, rs_l)
+        elif args['demand_type'] == 'gravity':
+            dm_getter = lambda _: dm.gravity_demand(graph)
+        else:
+            raise Exception("No such demand type")
+
+        # select sequence type:
         if args['sequence_type'] == 'cyclical':
-            dm_generator_getter = lambda seed: dm.cyclical_sequence(
-                lambda rs_l: dm.bimodal_demand(num_demands, rs_l),
-                sequence_length, args['cycle_length'], args['sparsity'],
-                seed=seed)
-        elif args['sequence_type'] == 'gravity':
-            dm_generator_getter = lambda seed: dm.cyclical_sequence(
-                lambda _: dm.gravity_demand(graph),
-                sequence_length, args['cycle_length'], args['sparsity'],
+            dm_sequence_getter = lambda seed, q: dm.cyclical_sequence(
+                dm_getter,
+                sequence_length, q, args['sparsity'],
                 seed=seed)
         elif args['sequence_type'] == 'average':
-            dm_generator_getter = lambda seed: dm.average_sequence(
-                lambda rs_l: dm.bimodal_demand(num_demands, rs_l),
-                sequence_length, args['cycle_length'], args['sparsity'],
+            dm_sequence_getter = lambda seed, q: dm.average_sequence(
+                dm_getter,
+                sequence_length, q, args['sparsity'],
                 seed=seed)
-        elif args['sequence_type'] == "totem":
-            dm_generator_getter = lambda seed: dm.totem_sequence(
+        elif args['sequence_type'] == 'totem':
+            dm_sequence_getter = lambda seed, _: dm.totem_sequence(
                 sequence_length, seed=seed)
         else:
             raise Exception("No such sequence type")
 
+        # combine cycle lengths with the seeds
+        demand_specs = args['demand_seeds']
+        if 'demand_qs' in args:
+            demand_specs = list(zip(demand_specs, args['demand_qs']))
+        elif 'cycle_length' in args:
+            demand_specs = [(d, args['cycle_length'] for d in demand_specs)]
+
         mlu = MaxLinkUtilisation(graph)
-        demand_sequences = map(dm_generator_getter, args['demand_seeds'])
+        demand_sequences = map(dm_sequence_getter, demand_specs)
         demands_with_opt = [[(demand, mlu.opt(demand)) for demand in sequence]
                             for
                             sequence in demand_sequences]
@@ -157,6 +167,10 @@ def argparser() -> argparse.ArgumentParser:
                         help="Seeds for demand sequences")
     parser.add_argument('-q', action='store', dest='cycle_length', type=int,
                         help="Length of cycles in demand matrix sequence")
+    parser.add_argument('-qs', nargs='+', action='store', dest='demand_qs',
+                        type=int,
+                        help="Length of cycles for each demand sequence."
+                             "Overrides -q")
     parser.add_argument('-sp', action='store', dest='sparsity', type=float,
                         help="Demand matrix sparsity")
     parser.add_argument('-l', action='store', dest='sequence_length', type=int,
