@@ -133,6 +133,9 @@ def from_graphspec(graphspec: str) -> nx.DiGraph:
     elif name == 'full':
         graph = full()
     else:
+        if len(parsed) > 1:
+            # the modifications mean it becomes infeasible otherwise
+            weight = 10 * weight
         graph = topologyzoo(name, weight)
 
     # graphspec allows edges and nodes to be dropped or added
