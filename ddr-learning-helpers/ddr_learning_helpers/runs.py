@@ -85,10 +85,10 @@ def demands_from_args(args: Dict, graphs: List[nx.DiGraph]) -> List[List[
         if 'demand_qs' in args:
             demand_specs = list(zip(demand_specs, args['demand_qs']))
         elif 'cycle_length' in args:
-            demand_specs = [(d, args['cycle_length'] for d in demand_specs)]
+            demand_specs = [(d, args['cycle_length']) for d in demand_specs]
 
         mlu = MaxLinkUtilisation(graph)
-        demand_sequences = map(dm_sequence_getter, demand_specs)
+        demand_sequences = [dm_sequence_getter(s, q) for (s, q) in demand_specs]
         demands_with_opt = [[(demand, mlu.opt(demand)) for demand in sequence]
                             for
                             sequence in demand_sequences]
