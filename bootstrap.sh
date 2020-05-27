@@ -1,7 +1,7 @@
 #!/bin/bash
 sudo apt-get -y update
 sudo apt-get -y upgrade
-sudo apt-get install -y cmake libopenmpi-dev python3-dev zlib1g-dev libsm6 libxext6 libxrender-dev
+sudo apt-get install -y cmake libopenmpi-dev python3-dev zlib1g-dev libsm6 libxext6 libxrender-dev unzip
 
 # install conda
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh

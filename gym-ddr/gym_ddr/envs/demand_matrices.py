@@ -55,7 +55,7 @@ def gravity_demand(graph: nx.DiGraph) -> Demand:
 
     return np.divide(np.array(
         [node_out_flow[i] * node_in_flow[j] for i in range(num_nodes) for j in
-         range(num_nodes) if i != j]), total_flow * 2)
+         range(num_nodes) if i != j]), total_flow * 10)
 
 
 def bimodal_demand(
