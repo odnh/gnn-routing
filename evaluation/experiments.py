@@ -291,7 +291,7 @@ def train_models():
     """Train all models"""
     for spec_id in train.keys():
         for policy_id in base.keys():
-            if spec_id == '3' and policy_id not in ['gnn', 'iter']:
+            if spec_id in ['4.1', '4.2'] and policy_id not in ['gnn', 'iter']:
                 # graph generalisation not work for other policies
                 continue
             train_model(spec_id, policy_id)
@@ -301,7 +301,7 @@ def run_experiments():
     """Run all experiments"""
     for spec_id in test.keys():
         for policy_id in base.keys():
-            if spec_id == '3' and policy_id not in ['gnn', 'iter']:
+            if spec_id in ['4.1', '4.2'] and policy_id not in ['gnn', 'iter']:
                 # graph generalisation not work for other policies
                 continue
             run_experiment(spec_id, policy_id)
