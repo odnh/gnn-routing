@@ -26,37 +26,9 @@ def vf_builder(vf_arch: str, graphs: List[nx.DiGraph], latent: tf.Tensor,
     Returns:
         A tensor which will hold the value
     """
-    # TODO: make support multiple graphs (and only use mlp vf until that point)
-    num_edges = graphs[0].number_of_edges()
-    num_nodes = graphs[0].number_of_nodes()
-
     if vf_arch == "shared":
-        output_edges_vf = tf.reshape(shared_graph.edges,
-                                     tf.constant([-1, num_edges * layer_size],
-                                                 np.int32))
-        output_nodes_vf = tf.reshape(shared_graph.nodes,
-                                     tf.constant([-1, num_nodes * layer_size],
-                                                 np.int32))
-        output_globals_vf = tf.reshape(shared_graph.globals,
-                                       tf.constant([-1, layer_size], np.int32))
-        latent_vf = tf.concat(
-            [output_edges_vf, output_nodes_vf, output_globals_vf], 1)
-        latent_vf = act_fun(
-            linear(latent_vf, "vf_fc0", 128, init_scale=np.sqrt(2)))
-        latent_vf = act_fun(
-            linear(latent_vf, "vf_fc1", 128, init_scale=np.sqrt(2)))
-    elif vf_arch == "shared_iter":
-        output_edges_vf = tf.reshape(shared_graph.edges,
-                                     tf.constant([-1, num_edges * layer_size],
-                                                 np.int32))
-        output_nodes_vf = tf.reshape(shared_graph.nodes,
-                                     tf.constant([-1, num_nodes * layer_size],
-                                                 np.int32))
-        output_globals_vf = tf.reshape(shared_graph.globals,
-                                       tf.constant([-1, 2 * layer_size],
-                                                   np.int32))
-        latent_vf = tf.concat(
-            [output_edges_vf, output_nodes_vf, output_globals_vf], 1)
+        output_globals_vf = tf.reshape(shared_graph.globals, [-1, layer_size])
+        latent_vf = output_globals_vf
         latent_vf = act_fun(
             linear(latent_vf, "vf_fc0", 128, init_scale=np.sqrt(2)))
         latent_vf = act_fun(
@@ -64,16 +36,8 @@ def vf_builder(vf_arch: str, graphs: List[nx.DiGraph], latent: tf.Tensor,
     elif vf_arch == "graph":
         model_vf = DDRGraphNetwork(layer_size=layer_size)
         output_graph_vf = model_vf(input_graph, iterations)
-        output_edges_vf = tf.reshape(output_graph_vf.edges,
-                                     tf.constant([-1, num_edges * layer_size],
-                                                 np.int32))
-        output_nodes_vf = tf.reshape(output_graph_vf.nodes,
-                                     tf.constant([-1, num_nodes * layer_size],
-                                                 np.int32))
-        output_globals_vf = tf.reshape(output_graph_vf.globals,
-                                       tf.constant([-1, layer_size], np.int32))
-        latent_vf = tf.concat(
-            [output_edges_vf, output_nodes_vf, output_globals_vf], 1)
+        output_globals_vf = tf.reshape(output_graph_vf.globals, [-1, layer_size])
+        latent_vf = output_globals_vf
     elif vf_arch == "mlp":
         latent_vf = latent
         latent_vf = act_fun(
