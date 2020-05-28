@@ -299,7 +299,6 @@ def run_model(config: Dict):
     parallelism = config['parallelism']
     replay_steps = config['replay_steps']
 
-
     oblivious_routings = [routing_baselines.shortest_path_routing(graph) for
                           graph in graphs]
 
@@ -325,7 +324,8 @@ def run_model(config: Dict):
     opt_utilisations = []
     oblivious_utilisations = []
     if env_name == 'ddr-iterative-v0':
-        replay_steps = replay_steps * envs.envs[0].graph.number_of_edges()
+        replay_steps = replay_steps * envs.envs[0].graphs[
+            envs.envs[0].graph_index].number_of_edges()
         for i in range(replay_steps - 1):
             action, state = model.predict(obs, state=state, deterministic=True)
             obs, reward, done, info = envs.step(action)
