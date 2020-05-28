@@ -49,14 +49,22 @@ def plot_exp1():
     df = pd.concat(results)
 
     plt.clf()
-    sns.barplot(y='ratio', x='policy_name', data=df, palette='colorblind',
-                hue='test_number')
+    palette = sns.color_palette('colorblind')
+    ax = sns.barplot(y='ratio', x='policy_name', data=df, palette=palette,
+                hue='test_number', capsize=0.05, errwidth=0.5, ci="sd")
 
     # draw oblivious ratio lines
     oblivious_heights = list(df.groupby('test_number')['oblivious_ratio'].mean())
-    palette = sns.color_palette("colorblind")
     for i, height in enumerate(oblivious_heights):
         plt.axhline(height, ls='--', color=palette[i])
+
+    # fix labels
+    ax.set_xlabel("Policy")
+    ax.set_ylabel("Maximum utilisation ratio")
+    ax.set_xticklabels(['MLP', 'LSTM', 'GNN', 'GNN Iterative'])
+    handles, _ = ax.get_legend_handles_labels()
+    ax.legend(handles, ["Same DM", "Different DMs"])
+    plt.ylim(bottom=1)
 
     plt.savefig('plots/exp1.pgf')
 
@@ -70,14 +78,22 @@ def plot_exp2():
     df = pd.concat(results)
 
     plt.clf()
-    sns.barplot(y='ratio', x='policy_name', data=df, palette='colorblind',
-                hue='test_number')
+    palette = sns.color_palette('colorblind')
+    ax = sns.barplot(y='ratio', x='policy_name', data=df, palette=palette,
+                hue='test_number', capsize=0.05, errwidth=0.5, ci="sd")
 
     # draw oblivious ratio lines
     oblivious_heights = list(df.groupby('test_number')['oblivious_ratio'].mean())
-    palette = sns.color_palette("colorblind")
     for i, height in enumerate(oblivious_heights):
         plt.axhline(height, ls='--', color=palette[i])
+
+    # fix labels
+    ax.set_xlabel("Policy")
+    ax.set_ylabel("Maximum utilisation ratio")
+    ax.set_xticklabels(['MLP', 'LSTM', 'GNN', 'GNN Iterative'])
+    handles, _ = ax.get_legend_handles_labels()
+    ax.legend(handles, ["Bimodal cyclic", "Gravity cyclic", "Bimodal averaging", "Gravity averaging"])
+    plt.ylim(bottom=1)
 
     plt.savefig('plots/exp2.pgf')
 
@@ -91,14 +107,22 @@ def plot_exp3():
     df = pd.concat(results)
 
     plt.clf()
-    sns.barplot(y='ratio', x='policy_name', data=df, palette='colorblind',
-                hue='test_number')
+    palette = sns.color_palette('colorblind')
+    ax = sns.barplot(y='ratio', x='policy_name', data=df, palette=palette,
+                hue='test_number', capsize=0.05, errwidth=0.5, ci="sd")
 
     # draw oblivious ratio lines
     oblivious_heights = list(df.groupby('test_number')['oblivious_ratio'].mean())
-    palette = sns.color_palette("colorblind")
     for i, height in enumerate(oblivious_heights):
         plt.axhline(height, ls='--', color=palette[i])
+
+    # fix labels
+    ax.set_xlabel("Policy")
+    ax.set_ylabel("Maximum utilisation ratio")
+    ax.set_xticklabels(['MLP', 'LSTM', 'GNN', 'GNN Iterative'])
+    handles, _ = ax.get_legend_handles_labels()
+    ax.legend(handles, ["Varied cycle length"])
+    plt.ylim(bottom=1)
 
     plt.savefig('plots/exp3.pgf')
 
@@ -111,14 +135,22 @@ def plot_exp4():
     df = pd.concat(results)
 
     plt.clf()
-    sns.barplot(y='ratio', x='policy_name', data=df, palette='colorblind',
-                hue='test_number')
+    palette = sns.color_palette('colorblind')
+    ax = sns.barplot(y='ratio', x='policy_name', data=df, palette=palette,
+                hue='test_number', capsize=0.05, errwidth=0.5, ci="sd")
 
     # draw oblivious ratio lines
     oblivious_heights = list(df.groupby('test_number')['oblivious_ratio'].mean())
-    palette = sns.color_palette("colorblind")
     for i, height in enumerate(oblivious_heights):
         plt.axhline(height, ls='--', color=palette[i])
+
+    # fix labels
+    ax.set_xlabel("Policy")
+    ax.set_ylabel("Maximum utilisation ratio")
+    ax.set_xticklabels(['GNN', 'GNN Iterative'])
+    handles, _ = ax.get_legend_handles_labels()
+    ax.legend(handles, ["Graph modifications", "Different Graphs"])
+    plt.ylim(bottom=1)
 
     plt.savefig('plots/exp4.pgf')
 
@@ -131,14 +163,22 @@ def plot_exp5():
     df = pd.concat(results)
 
     plt.clf()
-    sns.boxplot(y='ratio', x='policy_name', data=df, palette='colorblind',
-                hue='test_number')
+    palette = sns.color_palette('colorblind')
+    ax = sns.boxplot(y='ratio', x='policy_name', data=df, palette=palette,
+                hue='test_number', capsize=0.05, errwidth=0.5, ci="sd")
 
     # draw oblivious ratio lines
     oblivious_heights = list(df.groupby('test_number')['oblivious_ratio'].mean())
-    palette = sns.color_palette("colorblind")
     for i, height in enumerate(oblivious_heights):
         plt.axhline(height, ls='--', color=palette[i])
+
+    # fix labels
+    ax.set_xlabel("Policy")
+    ax.set_ylabel("Maximum utilisation ratio")
+    ax.set_xticklabels(['MLP', 'LSTM', 'GNN', 'GNN Iterative'])
+    handles, _ = ax.get_legend_handles_labels()
+    ax.legend(handles, ["TOTEM"])
+    plt.ylim(bottom=1)
 
     plt.savefig('plots/exp4.pgf')
 
