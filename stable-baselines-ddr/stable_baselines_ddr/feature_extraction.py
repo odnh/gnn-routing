@@ -9,7 +9,7 @@ from stable_baselines.common.tf_layers import ortho_init, _ln
 from stable_baselines_ddr.graph_nets import DDRGraphNetwork
 
 
-def vf_builder(vf_arch: str, graphs: List[nx.DiGraph], latent: tf.Tensor,
+def vf_builder(vf_arch: str, latent: tf.Tensor,
                act_fun: tf.function, shared_graph: GraphsTuple = None,
                input_graph: GraphsTuple = None, layer_size: int = 64,
                iterations: int = 10) -> tf.Tensor:
@@ -17,7 +17,6 @@ def vf_builder(vf_arch: str, graphs: List[nx.DiGraph], latent: tf.Tensor,
     Builds the value function network for
     Args:
         vf_arch: arch to use as a string
-        graph: the graph this is being built for
         latent: the observation input
         act_fun: activation function
         shared_graph: the gnn output from the policy
@@ -150,7 +149,7 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
 
     latent_policy_gnn = tf.concat([output_edges, output_globals], axis=1)
     # build value function network
-    latent_vf = vf_builder(vf_arch, network_graphs, latent, act_fun,
+    latent_vf = vf_builder(vf_arch, latent, act_fun,
                            output_graph, input_graph, layer_size, iterations)
 
     return latent_policy_gnn, latent_vf

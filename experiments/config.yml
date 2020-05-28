@@ -12,7 +12,8 @@ vf_arch: graph  # value function architecture (don't use with mlp policy). diffe
 timesteps: 10000
 
 # DM sequence parameters
-sequence_type: cyclical  # type of cycle to use
+demand_type: bimodal  # type of dm (different choice: 'gravity')
+sequence_type: cyclical  # type of cycle to use (different choice: 'average')
 demand_seeds:  # list of seeds for generating DM sequences
   - 2
 cycle_length: 1  # length of cycle that repeats in DM sequence

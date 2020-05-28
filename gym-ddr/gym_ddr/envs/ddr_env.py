@@ -135,7 +135,7 @@ class DDREnv(gym.Env):
 
     def reset(self) -> Observation:
         # first choose a random dm sequence
-        self.dm_sequence_index = np.random.randint(0, len(self.dm_sequence[0][0]))
+        self.dm_sequence_index = np.random.randint(0, len(self.dm_sequence[0]))
         # and equivalently as random graph
         self.graph_index = self.graph_indices[
             np.random.randint(0, len(self.graph_indices))]
@@ -701,7 +701,7 @@ class DDREnvIterative(DDREnvSoftmin):
 
     def reset(self) -> Observation:
         # first choose a random dm sequence
-        self.dm_sequence_index = np.random.randint(0, len(self.dm_sequence[0][0]))
+        self.dm_sequence_index = np.random.randint(0, len(self.dm_sequence[0]))
         # and equivalently a random graph
         self.graph_index = self.graph_indices[
             np.random.randint(0, len(self.graph_indices))]

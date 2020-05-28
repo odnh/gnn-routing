@@ -248,7 +248,7 @@ test = {
             'graphs': ["Abilene", "Abilene:e:+:1", "Abilene:e:-:1",
                        "Abilene:n:+:1", "Abilene:n:-:1", "Abilene:e:+:2",
                        "Abilene:e:-:2", "Abilene:n:+:2", "Abilene:n:-:2"],
-            'graph_indices': [5, 6, 7, 8, 9],
+            'graph_indices': [5, 6, 7, 8],
             'replay_steps': 6
         },
     '4.2':
