@@ -149,7 +149,7 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
 
     latent_policy_gnn = tf.concat([output_edges, output_globals], axis=1)
     # build value function network
-    latent_vf = vf_builder(vf_arch, latent, act_fun,
+    latent_vf = vf_builder(vf_arch, flat_observations, act_fun,
                            output_graph, input_graph, layer_size, iterations)
 
     return latent_policy_gnn, latent_vf
@@ -251,8 +251,8 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     latent_policy_gnn = output_globals
 
     # build value function network
-    latent_vf = vf_builder(vf_arch, network_graphs, latent, act_fun,
-                           output_graph, input_graph, iterations)
+    latent_vf = vf_builder(vf_arch, flat_observations, act_fun,
+                           output_graph, input_graph, layer_size, iterations)
 
     return latent_policy_gnn, latent_vf
 

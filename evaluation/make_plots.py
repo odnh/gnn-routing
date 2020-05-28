@@ -49,7 +49,7 @@ def plot_exp1():
     df = pd.concat(results)
 
     plt.clf()
-    sns.boxplot(y='ratio', x='policy_name', data=df, palette='colorblind',
+    sns.barplot(y='ratio', x='policy_name', data=df, palette='colorblind',
                 hue='test_number')
 
     # draw oblivious ratio lines
@@ -70,7 +70,7 @@ def plot_exp2():
     df = pd.concat(results)
 
     plt.clf()
-    sns.boxplot(y='ratio', x='policy_name', data=df, palette='colorblind',
+    sns.barplot(y='ratio', x='policy_name', data=df, palette='colorblind',
                 hue='test_number')
 
     # draw oblivious ratio lines
@@ -86,12 +86,12 @@ def plot_exp3():
     """Generate plots for exp3"""
     tests = [(test_number, policy_name) for test_number in
              ['3.1'] for
-             policy_name in ['gnn', 'iter']]
+             policy_name in ['mlp', 'lstm', 'gnn', 'iter']]
     results = [read_results(*test) for test in tests]
     df = pd.concat(results)
 
     plt.clf()
-    sns.boxplot(y='ratio', x='policy_name', data=df, palette='colorblind',
+    sns.barplot(y='ratio', x='policy_name', data=df, palette='colorblind',
                 hue='test_number')
 
     # draw oblivious ratio lines
@@ -106,12 +106,12 @@ def plot_exp3():
 def plot_exp4():
     """Generate plots for exp4"""
     tests = [(test_number, policy_name) for test_number in ['4.1', '4.2'] for
-             policy_name in ['mlp', 'lstm', 'gnn', 'iter']]
+             policy_name in ['gnn', 'iter']]
     results = [read_results(*test) for test in tests]
     df = pd.concat(results)
 
     plt.clf()
-    sns.boxplot(y='ratio', x='policy_name', data=df, palette='colorblind',
+    sns.barplot(y='ratio', x='policy_name', data=df, palette='colorblind',
                 hue='test_number')
 
     # draw oblivious ratio lines
@@ -148,3 +148,4 @@ if __name__ == '__main__':
     plot_exp2()
     plot_exp3()
     plot_exp4()
+    plot_exp5()
