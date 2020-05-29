@@ -45,6 +45,8 @@ def run_model(env_name: str, graphs: List[nx.DiGraph],
     opt_utilisations = []
     oblivious_utilisations = []
     if env_name == 'ddr-iterative-v0':
+        replay_steps = replay_steps * envs.envs[0].graphs[
+            envs.envs[0].graph_index].number_of_edges()
         for i in range(replay_steps - 1):
             action, state = model.predict(obs, state=state, deterministic=True)
             obs, reward, done, info = envs.step(action)

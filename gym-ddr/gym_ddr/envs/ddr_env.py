@@ -195,9 +195,9 @@ class DDREnv(gym.Env):
         self.utilisation = self.mlus[self.graph_index].calc(
             self.dm_memory[0][0], routing)
         self.opt_utilisation = self.dm_memory[0][1]
-        return np.exp((self.opt_utilisation / self.utilisation) * 10)
+        # return np.exp((self.opt_utilisation / self.utilisation) * 10)
         # return 1.0 / ((self.utilisation / self.opt_utilisation) - 1)
-        # return -(self.utilisation / self.opt_utilisation)
+        return -(self.utilisation / self.opt_utilisation)
 
     def get_observation(self) -> Observation:
         """

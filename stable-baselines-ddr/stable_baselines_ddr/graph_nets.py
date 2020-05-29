@@ -145,9 +145,9 @@ class EncodeProcessDecode(snt.AbstractModule):
 class MLPCustomGN(snt.AbstractModule):
     """Full GraphNetwork with MLP edge, node, and global models."""
 
-    def __init__(self, layer_size=32, name="MLPCustomGN"):
+    def __init__(self, layer_size=32, layer_count=3, name="MLPCustomGN"):
         super(MLPCustomGN, self).__init__(name=name)
-        layers = [layer_size] * 3
+        layers = [layer_size] * layer_count
         with self._enter_variable_scope():
             self._network = modules.GraphNetwork(make_mlp_model_custom(layers), make_mlp_model_custom(layers),
                                                  make_mlp_model_custom(layers))
@@ -160,14 +160,14 @@ class DDRGraphNetwork(snt.AbstractModule):
     A custom graph network to be used for data-driven routing
     """
 
-    def __init__(self, layer_size=32,
+    def __init__(self, layer_size=32, layer_count=3,
                  edge_output_size=None,
                  node_output_size=None,
                  global_output_size=None,
                  name="DDRGraphNetwork"):
         super(DDRGraphNetwork, self).__init__(name=name)
         with self._enter_variable_scope():
-            self._block = MLPCustomGN(layer_size)
+            self._block = MLPCustomGN(layer_size, layer_count)
 
     def _build(self, input_op, num_processing_steps):
         latent = input_op

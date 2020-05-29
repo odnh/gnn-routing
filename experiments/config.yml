@@ -9,6 +9,8 @@ hyperparameters:  # json file containing PPO2 hyperparameters to override defaul
 graphs:  # empty uses a small-ish test graph. otherwise names match those in the topologyzoo data folder
   - Abilene
 vf_arch: graph  # value function architecture (don't use with mlp policy). different choices: 'mlp', 'shared', 'shared_iter'. non-mlp choices currently broken
+layer_size: 16  # size of layers in gnn functions
+layer_count: 2  # number of layers in gnn functions
 timesteps: 10000
 
 # DM sequence parameters
@@ -31,4 +33,4 @@ log_name: gnn
 model_path: gnn.zip
 
 # how many steps to replay (use sequence length - 1, but multiply by number of edges for iterative)
-replay_steps: 100
+replay_steps: 11

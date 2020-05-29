@@ -12,6 +12,7 @@ from stable_baselines_ddr.graph_nets import DDRGraphNetwork
 def vf_builder(vf_arch: str, latent: tf.Tensor,
                act_fun: tf.function, shared_graph: GraphsTuple = None,
                input_graph: GraphsTuple = None, layer_size: int = 64,
+               layer_count: int = 3,
                iterations: int = 10) -> tf.Tensor:
     """
     Builds the value function network for
@@ -35,7 +36,8 @@ def vf_builder(vf_arch: str, latent: tf.Tensor,
     elif vf_arch == "graph":
         model_vf = DDRGraphNetwork(layer_size=layer_size)
         output_graph_vf = model_vf(input_graph, iterations)
-        output_globals_vf = tf.reshape(output_graph_vf.globals, [-1, layer_size])
+        output_globals_vf = tf.reshape(output_graph_vf.globals,
+                                       [-1, layer_size])
         latent_vf = output_globals_vf
     elif vf_arch == "mlp":
         latent_vf = latent
@@ -54,6 +56,7 @@ def vf_builder(vf_arch: str, latent: tf.Tensor,
 def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
                   network_graphs: List[nx.DiGraph], dm_memory_length: int,
                   iterations: int = 10, layer_size: int = 128,
+                  layer_count: int = 3,
                   vf_arch: str = "mlp"):
     """
     Constructs a graph network from the graph passed in. Then inputs are
@@ -126,7 +129,7 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
                               n_node=n_node_list,
                               n_edge=n_edge_list)
 
-    model = DDRGraphNetwork(layer_size=layer_size)
+    model = DDRGraphNetwork(layer_size=layer_size, layer_count=layer_count)
     output_graph = model(input_graph, iterations)
 
     # NB: reshape needs num_edges as otherwise output tensor has too many
@@ -150,7 +153,8 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     latent_policy_gnn = tf.concat([output_edges, output_globals], axis=1)
     # build value function network
     latent_vf = vf_builder(vf_arch, flat_observations, act_fun,
-                           output_graph, input_graph, layer_size, iterations)
+                           output_graph, input_graph, layer_size, layer_count,
+                           iterations)
 
     return latent_policy_gnn, latent_vf
 
@@ -158,6 +162,7 @@ def gnn_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
 def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
                        network_graphs: List[nx.DiGraph], dm_memory_length: int,
                        iterations: int = 10, layer_size: int = 64,
+                       layer_count: int = 3,
                        vf_arch: str = "mlp"):
     """
     Constructs a graph network from the graph passed in. Then inputs are
@@ -193,17 +198,23 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     graph_idxs = tf.cast(latent[:, 0], np.int32)
     num_nodes_per_batch = tf.map_fn(lambda i: num_nodes[i], graph_idxs)
     num_edges_per_batch = tf.map_fn(lambda i: num_edges[i], graph_idxs)
-    observation_sizes = tf.multiply(num_nodes_per_batch, dm_memory_length * 2) + tf.multiply(num_edges_per_batch, 2)
+    observation_sizes = tf.multiply(num_nodes_per_batch,
+                                    dm_memory_length * 2) + tf.multiply(
+        num_edges_per_batch, 2)
     full_observations = latent[:, 1:]
     trimmed_observations = tf.RaggedTensor.from_tensor(full_observations,
                                                        lengths=observation_sizes)
 
     # slice apart the node and edge features in each seciton of batch
-    node_observation_sizes = tf.multiply(num_nodes_per_batch, dm_memory_length * 2)
+    node_observation_sizes = tf.multiply(num_nodes_per_batch,
+                                         dm_memory_length * 2)
     edge_observation_sizes = tf.multiply(num_edges_per_batch, 2)
-    interleaved_lengths = tf.reshape(tf.stack([node_observation_sizes, edge_observation_sizes], axis=1), [-1])
+    interleaved_lengths = tf.reshape(
+        tf.stack([node_observation_sizes, edge_observation_sizes], axis=1),
+        [-1])
     flattened_observations = trimmed_observations.flat_values
-    interleaved_observations = tf.RaggedTensor.from_row_lengths(flattened_observations, interleaved_lengths)
+    interleaved_observations = tf.RaggedTensor.from_row_lengths(
+        flattened_observations, interleaved_lengths)
     node_features_slice = interleaved_observations[::2].flat_values
     edge_features_slice = interleaved_observations[1::2].flat_values
 
@@ -243,7 +254,7 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
     # Our only output is a single global which is the value to set the edge
     # We still output other for use in shared part of value function
     # The global output is: [edge_value, gamma_value]
-    model = DDRGraphNetwork(layer_size=layer_size)
+    model = DDRGraphNetwork(layer_size=layer_size, layer_count=layer_count)
     output_graph = model(input_graph, iterations)
     output_globals = tf.reshape(output_graph.globals,
                                 tf.constant([-1, layer_size], np.int32))
@@ -252,7 +263,8 @@ def gnn_iter_extractor(flat_observations: tf.Tensor, act_fun: tf.function,
 
     # build value function network
     latent_vf = vf_builder(vf_arch, flat_observations, act_fun,
-                           output_graph, input_graph, layer_size, iterations)
+                           output_graph, input_graph, layer_size, layer_count,
+                           iterations)
 
     return latent_policy_gnn, latent_vf
 

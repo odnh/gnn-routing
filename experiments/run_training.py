@@ -6,14 +6,13 @@ import tensorflow as tf
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-import gym
-from stable_baselines import PPO2
-from stable_baselines.common.vec_env import SubprocVecEnv
+from stable_baselines import ACKTR
 
 from ddr_learning_helpers.runs import *
 
 
-def run_experiment(env_name: str, policy: ActorCriticPolicy, graphs: List[nx.DiGraph],
+def run_experiment(env_name: str, policy: ActorCriticPolicy,
+                   graphs: List[nx.DiGraph],
                    demands: List[List[Tuple[np.ndarray, float]]],
                    env_kwargs: Dict = {}, policy_kwargs: Dict = {},
                    hyperparameters: Dict = {}, timesteps: int = 10000,

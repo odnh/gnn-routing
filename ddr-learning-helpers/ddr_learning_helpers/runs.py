@@ -106,6 +106,8 @@ def policy_from_args(args: Dict, graphs: List[nx.DiGraph]) -> Tuple[
         policy_kwargs = {'network_graphs': graphs,
                          'dm_memory_length': dm_memory_length,
                          'vf_arch': args['vf_arch'],
+                         'layer_size': args['layer_size'],
+                         'layer_count': args['layer_count'],
                          'iterations': iterations
                          }
     elif args['policy'] == 'iter':
@@ -113,6 +115,8 @@ def policy_from_args(args: Dict, graphs: List[nx.DiGraph]) -> Tuple[
         policy_kwargs = {'network_graphs': graphs,
                          'dm_memory_length': dm_memory_length,
                          'vf_arch': args['vf_arch'],
+                         'layer_size': args['layer_size'],
+                         'layer_count': args['layer_count'],
                          'iterations': iterations
                          }
     elif args['policy'] == 'lstm':

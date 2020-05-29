@@ -38,7 +38,10 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
                  reuse=False, layers=None,
                  net_arch=[dict(vf=[128, 128, 128], pi=[128, 128, 128])],
                  act_fun=tf.tanh, cnn_extractor=nature_cnn,
-                 feature_extraction="gnn", network_graphs=None,
+                 feature_extraction="gnn",
+                 layer_size=64,
+                 layer_count=2,
+                 network_graphs=None,
                  dm_memory_length=None, iterations=10, vf_arch="mlp",
                  **kwargs):
         super(FeedForwardPolicyWithGnn, self).__init__(sess, ob_space, ac_space,
@@ -55,12 +58,12 @@ class FeedForwardPolicyWithGnn(ActorCriticPolicy):
             elif feature_extraction == "gnn":
                 pi_latent, vf_latent = gnn_extractor(
                     tf.layers.flatten(self.processed_obs), act_fun,
-                    network_graphs, dm_memory_length, iterations=iterations,
+                    network_graphs, dm_memory_length, layer_size=layer_size, layer_count=layer_count, iterations=iterations,
                     vf_arch=vf_arch)
             elif feature_extraction == "gnn_iter":
                 pi_latent, vf_latent = gnn_iter_extractor(
                     tf.layers.flatten(self.processed_obs), act_fun,
-                    network_graphs, dm_memory_length, iterations=iterations,
+                    network_graphs, dm_memory_length, layer_size=layer_size, layer_count=layer_count, iterations=iterations,
                     vf_arch=vf_arch)
             else:  # Assume mlp feature extraction
                 pi_latent, vf_latent = mlp_extractor(
