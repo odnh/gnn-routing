@@ -6,8 +6,6 @@ import tensorflow as tf
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-from stable_baselines import ACKTR
-
 from ddr_learning_helpers.runs import *
 
 
