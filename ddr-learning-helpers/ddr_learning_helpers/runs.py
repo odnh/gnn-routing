@@ -327,6 +327,7 @@ def run_model(config: Dict):
     utilisations = []
     opt_utilisations = []
     oblivious_utilisations = []
+    actions = []
     if env_name == 'ddr-iterative-v0':
         replay_steps = replay_steps * envs.envs[0].graphs[
             envs.envs[0].graph_index].number_of_edges()
@@ -344,12 +345,14 @@ def run_model(config: Dict):
             utilisations.append(info[0]['utilisation'])
             opt_utilisations.append(info[0]['opt_utilisation'])
             oblivious_utilisations.append(info[0]['oblivious_utilisation'])
+            actions.append(action)
     envs.close()
 
     # write the results to file
     result = {"utilisations": utilisations,
               "opt_utilisations": opt_utilisations,
-              "oblivious_utilisations": oblivious_utilisations}
+              "oblivious_utilisations": oblivious_utilisations,
+              "actions": actions}
     if 'output_path' in config:
         data = {**config, **result}
         with jsonlines.open(config['output_path'], 'w') as f:
