@@ -348,6 +348,9 @@ def run_model(config: Dict):
             actions.append(action)
     envs.close()
 
+    # so that is is JSON serialisable
+    actions = [action.tolist() for action in actions]
+
     # write the results to file
     result = {"utilisations": utilisations,
               "opt_utilisations": opt_utilisations,

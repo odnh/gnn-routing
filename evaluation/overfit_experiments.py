@@ -35,7 +35,6 @@ base_conf = {
     'replay_steps': 2
 }
 
-
 exp_conf = {
     '1':
         {
@@ -87,7 +86,8 @@ exp_conf = {
 def run_experiment(model_id: str, test_id: str, policy_id: str):
     """Run a specific experiment. Model must already be trained"""
     model_path = "models/overfit-{}-{}".format(model_id, policy_id)
-    output_path = "results/overfit-{}-{}-{}".format(model_id, test_id, policy_id)
+    output_path = "results/overfit-{}-{}-{}".format(model_id, test_id,
+                                                    policy_id)
     config = {**base_conf,
               **exp_conf[test_id],
               **policy_conf[policy_id],
@@ -120,7 +120,11 @@ def run_experiments():
         ('1_2', ['1', '2', 'out']),
         ('1_3', ['1', '2', '3', 'out']),
         ('1_4', ['1', '2', '3', '4', 'out']),
-        ('1_5', ['1', '2', '3', '4', '5', 'out'])]:
+        ('1_5', ['1', '2', '3', '4', '5', 'out']),
+        ('2', ['2']),
+        ('3', ['3']),
+        ('4', ['4']),
+        ('5', ['5'])]:
         for test_id in tests:
             run_experiment(model_id, test_id, 'mlp')
 
