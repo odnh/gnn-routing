@@ -358,5 +358,5 @@ def run_model(config: Dict):
               "actions": actions}
     if 'output_path' in config:
         data = {**config, **result}
-        with jsonlines.open(config['output_path'], 'w') as f:
+        with jsonlines.open(config['output_path'], 'a') as f:
             f.write(data)

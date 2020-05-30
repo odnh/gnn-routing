@@ -9,14 +9,14 @@ from ddr_learning_helpers.runs import run_training, run_model
 policy_conf = {
     'mlp': {'env_name': 'ddr-softmin-v0',
             'policy': 'mlp',
-            'hyperparameters': 'configs/hpm.json'},
+            'hyperparameters': None},
     'gnn': {'env_name': 'ddr-softmin-v0',
             'policy': 'gnn',
             'layer_size': 64,
             'layer_count': 3,
             'gnn_iterations': 2,
             'vf_arch': 'shared',
-            'hyperparameters': 'configs/hpg.json'},
+            'hyperparameters': None},
 }
 
 base_conf = {
@@ -29,7 +29,7 @@ base_conf = {
     'sparsity': 0.0,
     'sequence_length': 2,
     'seed': 1,
-    'parallelism': 4,
+    'parallelism': 8,
     'tensorboard_log': None,
     'log_name': 1,
     'replay_steps': 2
