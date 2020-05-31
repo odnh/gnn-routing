@@ -164,7 +164,7 @@ def plot_exp5():
 
     plt.clf()
     palette = sns.color_palette('colorblind')
-    ax = sns.boxplot(y='ratio', x='policy_name', data=df, palette=palette,
+    ax = sns.barplot(y='ratio', x='policy_name', data=df, palette=palette,
                 hue='test_number', capsize=0.05, errwidth=0.5, ci="sd")
 
     # draw oblivious ratio lines
@@ -180,7 +180,7 @@ def plot_exp5():
     ax.legend(handles, ["TOTEM"])
     plt.ylim(bottom=1)
 
-    plt.savefig('plots/exp4.pgf')
+    plt.savefig('plots/exp5.pgf')
 
 
 if __name__ == '__main__':
