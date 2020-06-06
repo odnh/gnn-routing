@@ -1,26 +1,27 @@
-# Evauluation
+# Evaluation
 
 In this folder resides the code for performing the evaluation. This includes
 training, running experiments on models, and graphing results.
 
 ## Layout
 
-- `configs`: contains all the config files for training and experiments
+- `configs`: contains all the hyperparameter configs
 - `models`: location to store trained models
 - `plots`: plot output location from graphing scrips
 - `results`: results outputs from running experiments
 
-## Config explanation
+## Script explanation
 
-We use hierarchical yaml files (each can specify a list of parents which they
-partially override). `train-a.yml` is a top-level training specification.
-`train-a.b.yml` is that training tweaked for a speicifc policy. `test-a._.c.yml`
-is settings for a test to be run on all models `b` trained from `train-a.b.yml`
-configs. The json files in this folder are for hyperparameter configuration.
+- `experiments.py`: Runs all the training and evaluating. Example configuration
+                    is in code at the top of the file.
+- `make_plots.py`: plots the results obtained (to pgf format)
+- `overfit_experiments.py`: Further experiments to test overfitting
+- `make_overfit_plots.py`: plots the results obtained (to pgf format)
+
 
 ## Results
 
-Results are stroed in a file format where each line is a json object. The json
+Results are stored in a file format where each line is a json object. The json
 object is simply the configuration of the run and 3 extra values: a list of the
-optimal congestion, oblivous congestion, and agent congestion per dm in the
+optimal congestion, oblivious congestion, and agent congestion per dm in the
 sequence.
