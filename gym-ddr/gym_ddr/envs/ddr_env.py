@@ -120,7 +120,7 @@ class DDREnv(gym.Env):
         if self.dm_index == len(
                 self.dm_sequence[self.graph_index][self.dm_sequence_index]):
             self.done = True
-            reward = 0.0  # TODO: maybe need more sensible reward when set done
+            reward = 0.0
             data_dict = {}
         else:
             new_dm = self.dm_sequence[self.graph_index][self.dm_sequence_index][
@@ -251,7 +251,6 @@ class DDREnvDest(DDREnv):
     DDR Env where routing is destination-based which significantly reduces
     the action space. This class simply performs the translation to a full
     routing.
-    TODO: requires some tweaking if want to use with multigraph correctly
     """
 
     def __init__(self,
@@ -347,7 +346,6 @@ class DDREnvSoftmin(DDREnv):
         # cut action down to correct size for current graph
         action = action[0:graph.number_of_edges()]
 
-        # TODO: revisit
         # First we place the routing edge weights on the graph (and rescale
         # between 0 and 1 but plus epsilon so that no edges have 0 weight which
         # causes pruning issues when removing cycles)
@@ -355,7 +353,6 @@ class DDREnvSoftmin(DDREnv):
             graph[edge[0]][edge[1]]['route_weight'] = ((action[
                                                             i] + 1.0) / 2.0) + EPSILON
 
-        # TODO: revisit
         # rescale softmin gamma from action range [-1, 1] to [0, e^2]
         # is not linear because action of gamma is not linear
         gamma = np.exp((action[-1] + 1.0) * 1.5) - 1.0
@@ -514,7 +511,6 @@ class DDREnvSoftmin(DDREnv):
                 # this could lead to a loops so don't use this path
                 continue
 
-            # TODO: try some sort of distance interpolation instead maybe?
             path_dist = dest_dist[ancestor_end]
 
             ## we want to direct flow the other way along here, so reparent, set

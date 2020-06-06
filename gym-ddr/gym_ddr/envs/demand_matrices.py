@@ -61,7 +61,6 @@ def gravity_demand(graph: nx.DiGraph) -> Demand:
 def bimodal_demand(
         number_of_flows: int,
         random_state: RandomState = RandomState()) -> Demand:
-    # TODO: temper size of demand based on network bandwidth
     """
     Generates bimodal demand (probabilistic) for one time step
     Args:

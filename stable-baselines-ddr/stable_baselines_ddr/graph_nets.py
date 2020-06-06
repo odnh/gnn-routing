@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"""Model architectures for the demos."""
 from typing import List
 
 import sonnet as snt
@@ -161,9 +160,6 @@ class DDRGraphNetwork(snt.AbstractModule):
     """
 
     def __init__(self, layer_size=32, layer_count=3,
-                 edge_output_size=None,
-                 node_output_size=None,
-                 global_output_size=None,
                  name="DDRGraphNetwork"):
         super(DDRGraphNetwork, self).__init__(name=name)
         with self._enter_variable_scope():

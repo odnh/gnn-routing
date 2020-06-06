@@ -75,7 +75,6 @@ class MaxLinkUtilisation:
             # if we take more than |E| steps we have cycles which is not good.
             # Therefore: end here with really bad reward, scaled by number of
             # cycles
-            # TODO: assess if this actually works properly
             if num_steps > routing.shape[1]:
                 remaining_flow = np.greater(np.nan_to_num(change), 0.0)
                 edge_utilisation += np.multiply(remaining_flow, np.full(
@@ -235,7 +234,6 @@ class MaxLinkUtilisation:
         Returns:
             Link utilisation as an ndarray (one value per edge)
         """
-        # TODO: make this code run much faster
         edge_mapping = {edge: i for i, edge in
                         enumerate(sorted(self.graph.edges))}
 
@@ -259,7 +257,7 @@ class MaxLinkUtilisation:
                 ratio = routing[edge_index]
                 flow_to_send = ratio * current_flow
                 # only send flow if greater than epsilon (so no 'infinite' loops)
-                if flow_to_send > 1.e-8:  # TODO: can we do this better?
+                if flow_to_send > 1.e-8:
                     node_flow[edge[1]] += ratio * current_flow
                     # all important step, update our output
                     link_utilisation[edge_index] += ratio * current_flow
@@ -330,7 +328,7 @@ class MaxLinkUtilisation:
         Returns:
           max-link-utilisation
         """
-        epsilon = self.epsilon  # TODO: work out how to make this more stable (objective maybe)
+        epsilon = self.epsilon
 
         # Create the linear solver with the GLOP backend.
         solver = pywraplp.Solver('flow_utilisation_lp',
