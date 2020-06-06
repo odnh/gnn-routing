@@ -1,3 +1,5 @@
+# this is an example filled in config file for running training
+
 # env parameters
 env: ddr-softmin-v0  # for iterative use 'ddr-iterative-v0'
 memory_length: 1 # length of history of DMs input to the network as an observation

@@ -36,8 +36,8 @@ train = {
     '1.1':
         {
             'memory_length': 1,
-            'graphs': ['basic2'],
-            'timesteps': 100000,
+            'graphs': ['Abilene'],
+            'timesteps': 200000,
             'demand_type': 'bimodal',
             'sequence_type': 'cyclical',
             'demand_seeds': [2],
@@ -53,11 +53,11 @@ train = {
     '1.2':
         {
             'memory_length': 1,
-            'graphs': ['basic2'],
-            'timesteps': 100000,
+            'graphs': ['Abilene'],
+            'timesteps': 200000,
             'demand_type': 'bimodal',
             'sequence_type': 'cyclical',
-            'demand_seeds': list(range(10000)),
+            'demand_seeds': list(range(100)),
             'cycle_length': 101,
             'sparsity': 0.0,
             'sequence_length': 101,
@@ -70,11 +70,11 @@ train = {
     '2.1':
         {
             'memory_length': 10,
-            'graphs': ['basic2'],
-            'timesteps': 100000,
+            'graphs': ['Abilene'],
+            'timesteps': 200000,
             'demand_type': 'bimodal',
             'sequence_type': 'cyclical',
-            'demand_seeds': list(range(10000)),
+            'demand_seeds': list(range(100)),
             'cycle_length': 5,
             'sparsity': 0.0,
             'sequence_length': 6,
@@ -87,11 +87,11 @@ train = {
     '2.2':
         {
             'memory_length': 10,
-            'graphs': ['basic2'],
-            'timesteps': 100000,
+            'graphs': ['Abilene'],
+            'timesteps': 200000,
             'demand_type': 'gravity',
             'sequence_type': 'cyclical',
-            'demand_seeds': list(range(10000)),
+            'demand_seeds': list(range(100)),
             'cycle_length': 5,
             'sparsity': 0.5,
             'sequence_length': 6,
@@ -104,11 +104,11 @@ train = {
     '2.3':
         {
             'memory_length': 10,
-            'graphs': ['basic2'],
-            'timesteps': 100000,
+            'graphs': ['Abilene'],
+            'timesteps': 200000,
             'demand_type': 'bimodal',
             'sequence_type': 'average',
-            'demand_seeds': list(range(10000)),
+            'demand_seeds': list(range(100)),
             'cycle_length': 5,
             'sparsity': 0.0,
             'sequence_length': 6,
@@ -121,11 +121,11 @@ train = {
     '2.4':
         {
             'memory_length': 10,
-            'graphs': ['basic2'],
-            'timesteps': 100000,
+            'graphs': ['Abilene'],
+            'timesteps': 200000,
             'demand_type': 'gravity',
             'sequence_type': 'average',
-            'demand_seeds': list(range(10000)),
+            'demand_seeds': list(range(100)),
             'cycle_length': 5,
             'sparsity': 0.5,
             'sequence_length': 6,
@@ -138,8 +138,8 @@ train = {
     '3.1':
         {
             'memory_length': 10,
-            'graphs': ['basic2'],
-            'timesteps': 100000,
+            'graphs': ['Abilene'],
+            'timesteps': 200000,
             'demand_type': 'bimodal',
             'sequence_type': 'cyclical',
             'demand_seeds': [1, 1, 1, 1, 1],
@@ -155,14 +155,14 @@ train = {
     '4.1':
         {
             'memory_length': 10,
-            'graphs': ["basic2", "basic2:e:+:1", "basic2:e:-:1",
-                       "basic2:n:+:1", "basic2:n:-:1", "basic2:e:+:2",
-                       "basic2:e:-:2", "basic2:n:+:2", "basic2:n:-:2"],
+            'graphs': ["Abilene", "Abilene:e:+:1", "Abilene:e:-:1",
+                       "Abilene:n:+:1", "Abilene:n:-:1", "Abilene:e:+:2",
+                       "Abilene:e:-:2", "Abilene:n:+:2", "Abilene:n:-:2"],
             'graph_indices': [0, 1, 2, 3, 4],
-            'timesteps': 100000,
+            'timesteps': 200000,
             'demand_type': 'bimodal',
             'sequence_type': 'cyclical',
-            'demand_seeds': list(range(10000)),
+            'demand_seeds': list(range(100)),
             'cycle_length': 5,
             'sparsity': 0.0,
             'sequence_length': 6,
@@ -175,12 +175,12 @@ train = {
     '4.2':
         {
             'memory_length': 10,
-            'graphs': ["basic2", "basic", "full", "Abilene"],
+            'graphs': ["Abilene", "basic", "full", "Abilene"],
             'graph_indices': [0, 1],
-            'timesteps': 100000,
+            'timesteps': 200000,
             'demand_type': 'bimodal',
             'sequence_type': 'cyclical',
-            'demand_seeds': list(range(10000)),
+            'demand_seeds': list(range(100)),
             'cycle_length': 5,
             'sparsity': 0.0,
             'sequence_length': 6,
@@ -194,7 +194,7 @@ train = {
         {
             'memory_length': 10,
             'graphs': ["totem"],
-            'timesteps': 100000,
+            'timesteps': 200000,
             'demand_type': 'bimodal',  # this arg is required but ignored
             'sequence_type': 'totem',
             'demand_seeds': [1, 2, 3, 4, 5],
@@ -218,27 +218,27 @@ test = {
         },
     '1.2':
         {
-            'demand_seeds': list(range(10000, 20000)),
+            'demand_seeds': list(range(100, 200)),
             'replay_steps': 101
         },
     '2.1':
         {
-            'demand_seeds': list(range(10000, 20000)),
+            'demand_seeds': list(range(100, 200)),
             'replay_steps': 6
         },
     '2.2':
         {
-            'demand_seeds': list(range(10000, 20000)),
+            'demand_seeds': list(range(100, 200)),
             'replay_steps': 6
         },
     '2.3':
         {
-            'demand_seeds': list(range(10000, 20000)),
+            'demand_seeds': list(range(100, 200)),
             'replay_steps': 6
         },
     '2.4':
         {
-            'demand_seeds': list(range(10000, 20000)),
+            'demand_seeds': list(range(100, 200)),
             'replay_steps': 6
         },
     '3.1':
@@ -249,15 +249,15 @@ test = {
         },
     '4.1':
         {
-            'graphs': ["basic2", "basic2:e:+:1", "basic2:e:-:1",
-                       "basic2:n:+:1", "basic2:n:-:1", "basic2:e:+:2",
-                       "basic2:e:-:2", "basic2:n:+:2", "basic2:n:-:2"],
+            'graphs': ["Abilene", "Abilene:e:+:1", "Abilene:e:-:1",
+                       "Abilene:n:+:1", "Abilene:n:-:1", "Abilene:e:+:2",
+                       "Abilene:e:-:2", "Abilene:n:+:2", "Abilene:n:-:2"],
             'graph_indices': [5, 6, 7, 8],
             'replay_steps': 6
         },
     '4.2':
         {
-            'graphs': ["basic2", "basic", "full", "Abilene"],
+            'graphs': ["Abilene", "basic", "full", "Abilene"],
             'graph_indices': [2, 3],
             'replay_steps': 6
         },
